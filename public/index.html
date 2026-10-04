@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BrandKit: live brand extraction</title>
+<meta name="description" content="Give it a company name or URL and get back a structured brand guide: logo, colour palette, typography, tone of voice and messaging, read from the live site with TinyFish Search and Fetch.">
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/deck.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f5bde6'/><path d='M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z' fill='%231e1e2e'/></svg>">
+</head>
+<!--
+  data-view="hero" hides the rail, the empty state and the footer. Those
+  elements, their styles and their behaviour are all still here: the run
+  controls drive the composer exactly as they always did, and the document
+  still renders into the stage when a run finishes. Only the framing changes.
+-->
+<body data-view="idle">
+
+<a class="skip" href="#hero-composer">Skip to the tool</a>
+
+<header class="appbar">
+  <div class="appbar-inner">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7"/><path d="M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z"/></svg>
+      <span class="brand-name">BrandKit</span>
+    </div>
+
+    <div class="appbar-context" id="appbar-context" hidden>
+      <span class="context-name" id="context-name"></span>
+      <button type="button" class="btn-ghost" id="new-run">New run</button>
+    </div>
+
+    <!--
+      Where the code and the author are. Inside the floating tab rather than
+      parked beside it, so the bar reads as one object instead of a logo with two
+      orphans hanging off the edge.
+    -->
+    <nav class="appbar-social" aria-label="BrandKit elsewhere">
+      <a class="social-link" href="https://github.com/GxAditya/Brandkit" target="_blank" rel="noopener noreferrer" aria-label="BrandKit on GitHub" title="GitHub">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-github"/></svg>
+      </a>
+      <a class="social-link" href="https://x.com/kaditya264" target="_blank" rel="noopener noreferrer" aria-label="kaditya264 on X" title="X">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-x"/></svg>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<!-- ── Hero ──────────────────────────────────────────────────────────────── -->
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-inner">
+    <h1 class="hero-title" id="hero-title">Generate brand guidelines in a single click.</h1>
+
+    <div class="hero-tabs" role="radiogroup" aria-label="Output">
+      <button type="button" class="hero-tab" data-mode="guide" aria-pressed="true">Guide</button>
+      <button type="button" class="hero-tab" data-mode="compare" aria-pressed="false">Compare</button>
+    </div>
+
+    <form id="hero-composer" class="hero-bar" autocomplete="off" novalidate>
+      <div class="search-pill" id="search-pill">
+        <svg class="pill-icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-search"/></svg>
+
+        <div class="pill-fields">
+          <input id="input" name="input" type="text" placeholder="linear"
+                 aria-label="Company name or website" spellcheck="false" required>
+          <div class="pill-split" id="pill-split" hidden>
+            <span class="pill-vs">vs</span>
+            <input id="competitors" type="text" placeholder="notion, asana"
+                   aria-label="Compare against" spellcheck="false">
+          </div>
+        </div>
+
+        <!-- The read depth lives inside the pill, so the search bar is the only
+             control on the page and depth is a property of the search.
+
+             A native select cannot be styled: the popup is drawn by the OS, so
+             it ignores every token in this file. The native select is therefore
+             kept as the value holder, hidden, and the visible control is a
+             button with a listbox on top of it. -->
+        <div class="pill-select" id="depth-control">
+          <select id="depth" name="depth" class="pill-select-native" tabindex="-1" aria-hidden="true">
+            <option value="quick">Quick</option>
+            <option value="standard" selected>Standard</option>
+            <option value="deep">Deep</option>
+          </select>
+
+          <button type="button" class="pill-select-trigger" id="depth-trigger"
+                  aria-label="Read depth" aria-haspopup="listbox"
+                  aria-expanded="false" aria-controls="depth-list">
+            <span class="pill-select-value">Standard</span>
+            <svg class="pill-caret" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-caret"/></svg>
+          </button>
+
+          <ul class="pill-menu" id="depth-list" role="listbox" aria-label="Read depth" hidden>
+            <li class="pill-menu-option" role="option" data-value="quick" aria-selected="false" tabindex="-1">Quick</li>
+            <li class="pill-menu-option" role="option" data-value="standard" aria-selected="true" tabindex="-1">Standard</li>
+            <li class="pill-menu-option" role="option" data-value="deep" aria-selected="false" tabindex="-1">Deep</li>
+          </ul>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary hero-cta" id="run-btn">
+        <span class="btn-label">Extract guide</span>
+        <span class="btn-spinner" aria-hidden="true"></span>
+      </button>
+    </form>
+
+    <p class="hero-note" id="hero-note">A bare name is resolved through search. A domain is opened directly.</p>
+    <p class="field-error hero-error" id="composer-error" role="alert" hidden></p>
+
+    <!--
+      The processing state. It lives inside the hero because the hero is what
+      becomes the panel: the controls do not move anywhere, the container they
+      are already in changes shape around them.
+
+      Only the orb and the word. The pipeline reports four stages and a call
+      log, and all of it is instrumentation the person waiting does not need.
+      This state says one true thing and nothing else.
+    -->
+    <div class="run-status" id="run-status" hidden>
+      <!--
+        The word, then the orb. Read as a sentence it is "Fetching…" followed by the
+        thing doing the fetching, so the label leads — and being first in the DOM as
+        well as on screen keeps the two orders from disagreeing.
+      -->
+      <p class="run-status-label" id="run-status-label">Fetching&hellip;</p>
+      <canvas class="run-orb" id="run-orb" width="168" height="168"
+              role="img" aria-label="Reading the site"></canvas>
+      <p class="sr-only" role="status" aria-live="polite" id="run-live"></p>
+    </div>
+  </div>
+</section>
+
+<main class="layout" id="work">
+
+  <!-- ── Left rail: everything that shapes the run ───────────────────────── -->
+  <aside class="rail" aria-label="Run options">
+    <form id="run-form" class="rail-form" autocomplete="off">
+
+      <fieldset class="field">
+        <legend class="field-label">Output</legend>
+        <div class="segmented" role="radiogroup" aria-label="Output">
+          <label>
+            <input type="radio" name="mode" value="guide" checked>
+            <span>Guide</span>
+          </label>
+          <label>
+            <input type="radio" name="mode" value="compare">
+            <span>Compare</span>
+          </label>
+        </div>
+        <p class="field-help">A guide documents one brand. A comparison sets it against up to four others.</p>
+      </fieldset>
+
+      <div class="field" id="compare-field" hidden>
+        <label class="field-label" for="competitors-rail">Compare against</label>
+        <input id="competitors-rail" type="text" placeholder="Notion, Asana, Height"
+               spellcheck="false" aria-describedby="compare-help">
+        <p class="field-help" id="compare-help">Two to five brands, separated by commas. Each is resolved and read the same way.</p>
+        <p class="field-error" id="compare-error" role="alert" hidden></p>
+      </div>
+
+      <div class="field" id="pages-field" data-disabled="true">
+        <div class="field-label-row">
+          <label class="field-label" for="pages">Guide length</label>
+          <span class="field-value" id="pages-value">14 pages</span>
+        </div>
+        <input id="pages" name="pages" type="range" min="6" max="24" step="1" value="14"
+               disabled aria-describedby="pages-help">
+        <p class="field-help" id="pages-help">
+          Seven pages are produced from measurement alone. Set GEMINI_API_KEY, or
+          LLM_API_KEY with LLM_BASE_URL and LLM_MODEL, to generate the full
+          document, where this becomes the page count.
+        </p>
+      </div>
+
+      <div class="field" id="depth-field">
+        <label class="field-label" for="depth-rail">Read depth</label>
+        <select id="depth-rail" name="depth">
+          <option value="quick">Quick, homepage only</option>
+          <option value="standard" selected>Standard, homepage plus 5 pages</option>
+          <option value="deep">Deep, up to 10 pages</option>
+        </select>
+        <p class="field-help">How many pages of the site to read. Deeper runs cost more and take longer.</p>
+      </div>
+
+      <div class="field examples-field">
+        <span class="field-label" id="examples-label">Try one</span>
+        <div class="examples" role="group" aria-labelledby="examples-label">
+          <button type="button" class="chip" data-example="linear">linear</button>
+          <button type="button" class="chip" data-example="GOV.UK">GOV.UK</button>
+          <button type="button" class="chip" data-example="patagonia.com">patagonia.com</button>
+        </div>
+      </div>
+    </form>
+  </aside>
+
+  <!-- ── Right: the document ─────────────────────────────────────────────── -->
+  <section class="stage">
+
+    <form id="composer" class="composer" autocomplete="off" novalidate>
+      <div class="composer-input">
+        <svg class="composer-icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="input-stage" name="input" type="text" placeholder="linear"
+               aria-label="Company name or website" spellcheck="false" required>
+      </div>
+      <button type="submit" class="btn-primary" id="run-btn-stage">
+        <span class="btn-label">Extract guide</span>
+        <span class="btn-spinner" aria-hidden="true"></span>
+      </button>
+      <p class="field-help composer-help" id="input-help">
+        A bare name is resolved through search. A domain is opened directly.
+      </p>
+    </form>
+
+    <!--
+      The output box.
+
+      One frame, two things in it. The grid reveal fills it while the guide is
+      being built, sitting exactly on top of the deck, so the guide is revealed in
+      place rather than arriving somewhere else. The frame is 4:3 because a
+      rendered page is 1200x900, which makes the box the grid occupies and the box
+      the deck occupies the same box to the pixel.
+
+      The toolbar above the frame is built by script: the page controls need the
+      deck's own navigation, and the export menu needs the guide in hand, so
+      neither can live in the markup.
+    -->
+    <div class="outbox" id="outbox" hidden>
+      <div class="outbox-bar" id="outbox-bar"></div>
+
+      <div class="outbox-frame">
+        <canvas class="outbox-canvas" id="reveal-canvas"
+                role="img" aria-label="The brand guide being built"></canvas>
+        <div id="output" class="output"></div>
+      </div>
+    </div>
+
+    <!-- Alerts float. They are not part of the output, and nothing else is. -->
+    <div id="alert-slot" class="toasts" aria-live="polite"></div>
+
+</main>
+
+<footer class="foot">
+  <p class="foot-line">Reads the live web through TinyFish Search and Fetch. Nothing is stored.</p>
+</footer>
+
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.2 10.2 13.5 13.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 16 16"><path d="M10 3.5L5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-next" viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-caret" viewBox="0 0 16 16"><path d="M4 6.5 8 10.5l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <!--
+    Brand marks, solid rather than stroked, so they carry their own silhouette
+    instead of borrowing the line weight of the interface icons beside them.
+  -->
+  <symbol id="i-github" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23a11.5 11.5 0 0 1 3-.405c1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path fill="currentColor" d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5v7.5M5 7.5L8 10.5l3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.75 12.25h10.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 16 16"><path d="M8 2.25L14.25 13.5H1.75z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.4v3.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.3" r=".85" fill="currentColor"/></symbol>
+</svg>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

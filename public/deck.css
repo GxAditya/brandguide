@@ -1,0 +1,857 @@
+/* ===========================================================================
+   The deck: a paged brand guide, reproduced as a landscape 4:3 document.
+
+   This stylesheet is deliberately separate from app.css. app.css paints the
+   TOOL (near-black, rose accent). This paints the ARTIFACT, which is set in
+   the brand it documents: --paper, --ink and the type stack are all injected
+   from the extraction, and the neutral values below are only a fallback for a
+   brand whose CSS yielded nothing.
+
+   The canvas is a fixed 1200x900 and is scaled to fit its container, so the
+   geometry below is literal: a 6.2% side margin means 74px, exactly as in
+   print. Nothing reflows between viewports, which is what makes one page look
+   the same on a laptop and on a projector.
+
+   Typography is a neo-grotesque stack, not a webfont. The project ships zero
+   dependencies and no build step, so a downloaded display face is not an
+   option, and the deck must not collapse onto Times the first time a brand's
+   own font fails to load.
+   =========================================================================== */
+
+.deck {
+  --paper: #f3f1ef;
+  --ink: #17161c;
+
+  /*
+   * Every derived tone is mixed from --ink rather than hardcoded dark values.
+   * A brand whose background is dark would otherwise get dark-on-dark rules,
+   * captions and tints, which is invisible exactly where the document needs to
+   * be readable. --ink is already the brand's own text colour, so following it
+   * works for a light brand and a dark one without a second palette.
+   */
+  --ink-70: color-mix(in srgb, var(--ink) 72%, var(--paper));
+  --ink-45: color-mix(in srgb, var(--ink) 55%, var(--paper));
+  --rule: var(--ink);
+  --rule-soft: color-mix(in srgb, var(--ink) 22%, transparent);
+
+  --face: "Helvetica Neue", Helvetica, "Segoe UI", Arial, ui-sans-serif, system-ui, sans-serif;
+  --face-brand: var(--face);
+  --face-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --page-w: 1200px;
+  --page-h: 900px;
+
+  height: 100%;
+}
+
+/* ── Viewport: holds one page, scaled to fit, centred ───────────────────── */
+
+.deck-viewport {
+  position: relative;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--ink);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 30px 70px -30px rgba(0, 0, 0, 0.85);
+}
+
+.deck-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1200px;
+  height: 900px;
+  transform-origin: top left;
+}
+
+/* ── The page ──────────────────────────────────────────────────────────── */
+
+.page {
+  position: absolute;
+  inset: 0;
+  width: 1200px;
+  height: 900px;
+  padding: 72px 75px 60px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--face);
+  font-size: 15px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Print plates want true black, so the document opts out of the tool's
+     softer chrome. This is a print convention, not a UI surface. */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A plate page: the section dividers. Plate = ink, so a light brand gets black
+   dividers and a dark brand gets white ones, which is what the template does. */
+.page[data-plate="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  --rule: color-mix(in srgb, var(--paper) 26%, transparent);
+  --rule-soft: color-mix(in srgb, var(--paper) 16%, transparent);
+  --ink-70: color-mix(in srgb, var(--paper) 72%, transparent);
+  --ink-45: color-mix(in srgb, var(--paper) 52%, transparent);
+}
+
+/* ── Running header: three columns, then a rule ────────────────────────── */
+
+.page-head {
+  display: grid;
+  /*
+   * Column three is kept for its spacing even though nothing prints in it. The
+   * reference deck fills that slot with its own designer's credit, which is not
+   * ours to reproduce, and no provenance line is worth repeating on every page of
+   * a brand guide. Dropping the column would move column two, so the track stays
+   * and the rule still spans the full measure.
+   */
+  grid-template-columns: 179px 182px 1fr;
+  column-gap: 0;
+  font-size: 11px;
+  line-height: 1.32;
+  letter-spacing: 0.005em;
+  flex: none;
+}
+
+.page-head span { display: block; }
+
+.page-head .head-topic { font-weight: 700; }
+.page-head .head-sub { font-weight: 400; }
+
+.page-rule {
+  margin: 42px 0 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  flex: none;
+}
+
+/* The running rule under the header sits lower than an in-body rule under a
+   section title. Measured off the reference: 72px of header, then the rule at
+   y=172, which is 70px below where the header block ends. */
+.page-rule.head-rule { margin-top: 70px; }
+
+.page-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: 30px;
+}
+
+/* ── Titles ────────────────────────────────────────────────────────────── */
+
+.t-display {
+  font-size: 52px;
+  line-height: 1;
+  letter-spacing: -0.021em;
+  font-weight: 500;
+  text-transform: uppercase;
+  margin: 0;
+  max-width: 20ch;
+}
+
+/* The full-bleed statement pages. Set as large as the page allows, because on
+   these pages the sentence IS the design. */
+.t-statement {
+  font-size: 46px;
+  line-height: 1.26;
+  letter-spacing: -0.021em;
+  font-weight: 400;
+  margin: 0;
+  max-width: 24ch;
+}
+
+.t-plate {
+  font-size: 46px;
+  line-height: 1;
+  letter-spacing: -0.021em;
+  font-weight: 500;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+/* Section title in the left column of a content page. */
+.t-split {
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: -0.021em;
+  font-weight: 500;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+/* ── Body copy ─────────────────────────────────────────────────────────── */
+
+/* The lead paragraph, set in the brand's own body face so the reader meets the
+   typeface before the specimen page does. */
+.lead {
+  font-family: var(--face-brand);
+  font-size: 17px;
+  line-height: 1.38;
+}
+
+.split-copy p {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.split-copy p:last-child { margin-bottom: 0; }
+
+/* The introduction: a full-width title over two columns of body copy. The
+   gutter is wider than a split page's because there is no title column taking
+   the left third, which is what leaves room for reading measure. */
+.intro-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 46px;
+  margin-top: 46px;
+}
+
+.intro-cols p {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.intro-cols p:last-child { margin-bottom: 0; }
+
+/* ── Contents ──────────────────────────────────────────────────────────── */
+
+.toc {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 64px;
+  align-content: start;
+}
+
+.toc-block { display: grid; align-content: start; gap: 0; }
+
+.toc-part {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 4px 0 6px;
+}
+
+.toc-item {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 10px;
+  font-size: 15px;
+  padding: 3px 0;
+  color: var(--ink-70);
+}
+
+.toc-item .n,
+.toc-part .n { font-weight: 400; }
+
+.toc-part.is-section { margin-top: 14px; }
+.toc-part.is-section:first-child { margin-top: 0; }
+
+/* ── Cover ──────────────────────────────────────────────────────────────── */
+
+/*
+ * The front plate. Left-aligned at the same 36% the section dividers use, which
+ * is what makes it read as part of the same system rather than a separate splash.
+ *
+ * Vertical placement is nudged above true centre: measured off the reference,
+ * the lockup sits about 40px high of the page's optical centre, because the
+ * logomark above it carries the visual weight.
+ */
+.cover-lockup {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-left: 362px;
+  transform: translateY(-42px);
+  min-width: 0;
+}
+
+.cover-mark {
+  display: block;
+  width: 146px;
+  height: 70px;
+  object-fit: contain;
+  object-position: left center;
+  margin-bottom: 25px;
+}
+
+/* The inline-SVG case, where the wrapper is a span rather than an image. */
+span.cover-mark,
+span.cover-mark.is-lockup {
+  display: flex;
+  align-items: center;
+}
+
+span.cover-mark > svg,
+span.cover-mark.is-lockup > svg {
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * A horizontal lockup is a different shape entirely. Squeezing it into the mark's
+ * square box would shrink it to a stamp, so it gets its own footprint.
+ */
+.cover-mark.is-lockup {
+  width: 420px;
+  height: 96px;
+  max-width: 100%;
+  margin-bottom: 28px;
+}
+
+.cover-name {
+  font-family: var(--face);
+  font-size: 76px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+  /* No text-transform. A brand that writes "tailwindcss" must not be set as
+     "TAILWIND CSS"; the casing is part of the identity. */
+  margin: 0;
+  max-width: 15ch;
+  overflow-wrap: break-word;
+}
+
+.cover-sub {
+  font-family: var(--face);
+  font-size: 66px;
+  line-height: 1;
+  letter-spacing: -0.015em;
+  font-weight: 500;
+  text-transform: uppercase;
+  /* Sized off the cap gap in the reference: 460 to 540 between the wordmark's
+     cap top and the subtitle's, which is less than the margin alone because
+     `line-height: 1` leaves no leading to absorb it. */
+  margin: 8px 0 0;
+  /* A muted step toward the page background, so it reads as secondary on both
+     a light brand and a dark one. */
+  color: color-mix(in srgb, var(--ink) 52%, var(--paper));
+}
+
+/* ── Plate / divider page ──────────────────────────────────────────────── */
+
+.plate-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-left: 359px;
+}
+
+.plate-list {
+  list-style: none;
+  margin: 26px 0 0;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.plate-list li { display: grid; grid-template-columns: 58px 1fr; gap: 10px; }
+.plate-list .n { opacity: 0.7; }
+
+/* ── Split content page: title left, copy right, specimen below ────────── */
+
+/* The reference puts the copy column at x=436, which is the 75px page margin
+   plus the 359px title column and no further gap. */
+.split-head {
+  display: grid;
+  grid-template-columns: 359px 1fr;
+  gap: 0 2px;
+  align-items: start;
+}
+
+.split-copy { display: grid; gap: 0 30px; }
+.split-copy.two { grid-template-columns: 1fr 1fr; }
+
+.plate-panel {
+  margin-top: 56px;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--rule);
+  /*
+   * A grey card, not a black hole.
+   *
+   * This was the document ink, which is near-black, so a mark sat in the middle of
+   * a void that read heavier than the page around it — a small coloured chip
+   * floating in a slab of black, with the mount competing with the thing it exists
+   * to present. Mixed back toward the paper it becomes a surface a mark can sit on
+   * and still read as a surface.
+   *
+   * It stays dark enough for the reason it exists: a white mark, or one that
+   * inherits `currentColor` from the panel, needs a ground to be light against, and
+   * this gives it about 8.7:1 rather than the 19:1 of true black.
+   *
+   * The two darks are deliberately different. The full-page divider plates stay
+   * true ink, because a divider is meant to be a solid beat in the document's
+   * rhythm. This one holds a single asset, and a mount should not be louder than
+   * what it holds.
+   */
+  background: color-mix(in srgb, var(--ink) 76%, var(--paper));
+  color: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  overflow: hidden;
+}
+
+/*
+ * A light plate. Tinted rather than left as bare paper: on the same colour as the
+ * page it reads as an empty box rather than a deliberate surface for the mark.
+ *
+ * Mixed from the same two tokens as the plate above, so the two are recognisably
+ * the same object at opposite ends, and neither can be pushed fully dark or fully
+ * light by a brand whose own colours pull that way.
+ */
+.plate-panel[data-light="true"] {
+  background: color-mix(in srgb, var(--ink) 5%, var(--paper));
+  border-color: color-mix(in srgb, var(--ink) 28%, var(--paper));
+  color: var(--ink);
+}
+
+.plate-panel img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+/* A favicon SVG often carries no intrinsic size, so it is given a box instead
+   of a max-width, which would collapse it to nothing. */
+.plate-panel .mark {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+}
+
+/*
+ * The inline-SVG case. `logoImage` returns a span wrapper when it inlines source
+ * so the logo can inherit colour, and that wrapper is not an <img>, so the
+ * rules above miss it. Without these an inlined logo renders at its intrinsic
+ * size and overflows the panel.
+ */
+.plate-panel span.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 200px;
+  height: 200px;
+}
+
+/*
+ * An inlined SVG keeps its own intrinsic size. A 16x16 favicon scaled with
+ * `width: auto` stays 16x16 and looks like a speck in a 200px box, so the
+ * wrapper hands it the whole box and lets `preserveAspectRatio` do the fitting.
+ * The default is `xMidYMid meet`, which scales uniformly and letterboxes, so
+ * nothing is ever stretched.
+ */
+.plate-panel span.mark > svg {
+  width: 100%;
+  height: 100%;
+}
+
+.plate-panel[data-empty="true"] {
+  font-family: var(--face-mono);
+  font-size: 12px;
+  color: var(--ink-45);
+}
+
+/* ── Row list: label left, body right, sparse rules ────────────────────── */
+
+.rows {
+  display: grid;
+  align-content: start;
+}
+
+.rows.has-head { border-top: 1px solid var(--rule); }
+
+.row {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 0 20px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.row:last-child { border-bottom: 0; }
+
+.row-label {
+  font-size: 21px;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  font-weight: 400;
+  margin: 0;
+}
+
+.row-label.mono {
+  font-family: var(--face-mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  padding-top: 4px;
+}
+
+.row-body { font-size: 15px; line-height: 1.4; }
+.row-body p { margin: 0; }
+
+.row-note {
+  margin: 6px 0 0;
+  font-family: var(--face-mono);
+  font-size: 11px;
+  color: var(--ink-45);
+}
+
+.row-body blockquote {
+  margin: 10px 0 0;
+  padding-left: 13px;
+  border-left: 2px solid var(--rule);
+  font-size: 14px;
+  font-style: italic;
+  color: var(--ink-70);
+}
+
+.row-body cite {
+  display: block;
+  margin-top: 6px;
+  font-style: normal;
+  font-family: var(--face-mono);
+  font-size: 10px;
+  color: var(--ink-45);
+  word-break: break-all;
+}
+
+/* ── Colour palette page ───────────────────────────────────────────────── */
+
+/* Where the title is followed straight by content rather than by a rule. */
+.page-body > .pairs,
+.page-body > .conf-grid { margin-top: 34px; }
+
+.palette {
+  display: grid;
+  border: 1px solid var(--rule);
+  border-bottom: 0;
+  min-height: 0;
+  /* The swatch grid takes the rest of the page, the way a palette spread does.
+     Without this the colour band collapses to zero and the page shows tints
+     with no colour above them. */
+  flex: 1;
+}
+
+.palette[data-count="2"] { grid-template-columns: 1fr 1fr; }
+.palette[data-count="3"] { grid-template-columns: repeat(3, 1fr); }
+.palette[data-count="4"] { grid-template-columns: repeat(4, 1fr); }
+.palette[data-count="5"] { grid-template-columns: repeat(5, 1fr); }
+.palette[data-count="6"] { grid-template-columns: repeat(6, 1fr); }
+
+.palette-col {
+  border-right: 1px solid var(--rule-soft);
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  min-width: 0;
+}
+
+.palette-col:last-child { border-right: 0; }
+
+.palette-swatch {
+  min-height: 150px;
+  /* The swatch is a colour field, so it carries its own name for anyone who
+     cannot see it. */
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 10px;
+}
+
+.palette-meta { padding: 14px 16px 12px; }
+
+.palette-values {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.palette-name {
+  font-size: 34px;
+  line-height: 1.05;
+  letter-spacing: -0.018em;
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+}
+
+.palette-cmyk {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 10px;
+  font-family: var(--face-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.palette-cmyk dt { opacity: 0.62; }
+.palette-cmyk dd { margin: 0; font-weight: 600; }
+
+.palette-swatch .on-color {
+  font-family: var(--face-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  opacity: 0.82;
+}
+
+/* The four tint strips at the foot of every column, as in the template. */
+.tints { display: grid; grid-template-columns: repeat(4, 1fr); }
+
+.tint {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  font-family: var(--face-mono);
+  font-size: 10px;
+}
+
+/* ── Weights and scaling pages ─────────────────────────────────────────── */
+
+/*
+ * Two different label geometries in the reference, and keeping them apart is
+ * what stops the pages looking like one template:
+ *
+ *   Weights   label indented 36px, specimen at x=465  → 354px column
+ *   Scaling   label flush at x=75, sample at x=283    → 208px column
+ */
+.specimen-row {
+  display: grid;
+  grid-template-columns: 208px 1fr;
+  gap: 0 20px;
+  align-items: baseline;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.specimen-row.is-weights {
+  grid-template-columns: 354px 1fr;
+}
+
+.specimen-row.is-weights .specimen-label { padding-left: 36px; }
+
+.specimen-row:last-child { border-bottom: 0; }
+
+.specimen-label {
+  font-size: 15px;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.specimen-label.mono {
+  font-family: var(--face);
+  font-size: 15px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.specimen-glyphs {
+  font-family: var(--face-brand);
+  font-size: 22px;
+  line-height: 1.26;
+  letter-spacing: 0.004em;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.specimen-sample {
+  font-family: var(--face-brand);
+  font-size: 46px;
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+/* ── Weights, as a real typeface sheet ─────────────────────────────────── */
+
+.weight-name { font-size: 21px; margin: 0 0 4px; }
+.weight-meta { font-family: var(--face-mono); font-size: 11px; color: var(--ink-45); margin: 0; }
+
+.weight-glyphs {
+  font-family: var(--face-brand);
+  font-size: 20px;
+  line-height: 1.26;
+  /* Reset, or three stacked specimen paragraphs overflow the page bottom. */
+  margin: 0;
+}
+
+/* ── Register: contrast pairs ──────────────────────────────────────────── */
+
+.pairs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--rule);
+}
+
+.pair-cell {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  justify-content: center;
+  min-height: 168px;
+}
+
+.pair-cell:nth-child(odd) { border-right: 1px solid var(--rule-soft); }
+.pair-cell:nth-child(n + 3) { border-top: 1px solid var(--rule-soft); }
+
+.pair-sample { font-size: 30px; line-height: 1.16; letter-spacing: -0.015em; margin: 0; }
+
+.pair-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-family: var(--face-mono);
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* ── Small print ───────────────────────────────────────────────────────── */
+
+.fine {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-45);
+  margin: 0;
+}
+
+.source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--face-mono);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.source-list li { overflow-wrap: anywhere; }
+
+.conf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.conf-cell {
+  padding: 18px 20px;
+  border-right: 1px solid var(--rule-soft);
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.conf-cell:nth-child(3n) { border-right: 0; }
+
+.conf-score { font-family: var(--face-mono); font-size: 26px; letter-spacing: -0.01em; margin: 0; }
+.conf-name { font-size: 13px; margin: 4px 0 0; text-transform: uppercase; letter-spacing: 0.06em; }
+.conf-grade { font-family: var(--face-mono); font-size: 11px; color: var(--ink-45); margin: 2px 0 0; }
+
+/* Hidden pages must actually leave the flow. `.page` sets `display: flex`,
+   which beats the user-agent `[hidden]` rule, so the attribute is honoured
+   explicitly here or every page would stack on top of the last one. */
+.page[hidden] { display: none; }
+
+/* The turn between pages. Transform and opacity only, and only for the page
+   actually on screen. */
+.deck-canvas > .page[data-enter="true"] { animation: page-in 0.3s var(--ease) both; }
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+.deck-note {
+  font-size: 12px;
+  color: var(--dimmer);
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--ink-100);
+  border: 1px solid var(--ink-200);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--r-control);
+  line-height: 1.5;
+}
+
+.deck-note b { color: var(--paper); font-weight: 600; }
+
+.deck-note a { color: var(--accent); }
+
+/* ── Mobile ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .deck-viewport { border-radius: var(--r-control); }
+}
+
+/* ── Reduced motion ────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-canvas > .page[data-enter="true"] { animation: none; }
+}
+
+/* ── Print: one landscape sheet per page ───────────────────────────────── */
+
+/*
+ * The tool's own chrome is hidden in app.css, which owns those components.
+ * This block only has to un-frame the deck so every page lands on its own
+ * sheet at true size.
+ */
+
+@page {
+  size: 1200px 900px;
+  margin: 0;
+}
+
+@media print {
+  body { background: #fff; }
+  .deck { gap: 0; height: auto; }
+
+  /*
+   * Browsers drop backgrounds and background-images from print by default, on
+   * the grounds that most documents are black text on white. Here they are the
+   * measurement: the palette swatches, the tint strips and the contrast pairs are
+   * the whole point of those pages, and without this they print as blank paper.
+   * So the deck asks to keep its own colour, on the deck subtree only, rather
+   * than switching the setting for the application around it.
+   */
+  .deck,
+  .deck * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* `fit()` writes the scaled height onto the viewport as an inline style, which
+     outranks this sheet. Printing stacks the pages instead of showing one, so the
+     viewport has to give up the height it was given. */
+  .deck-viewport {
+    height: auto !important;
+    box-shadow: none;
+    border-radius: 0;
+    overflow: visible;
+    background: #fff;
+  }
+
+  .deck-canvas { position: static; width: auto; height: auto; transform: none !important; }
+
+  /* Every page prints, not just the one on screen. */
+  .deck-canvas > .page,
+  .deck-canvas > .page[hidden] {
+    position: relative;
+    display: flex;
+    animation: none !important;
+    transform: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+  .deck-canvas > .page:last-child { break-after: auto; page-break-after: auto; }
+}

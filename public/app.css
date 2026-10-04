@@ -1,0 +1,2271 @@
+:root {
+  /* ── Surfaces: Mocha's base, mantle and crust, rose-shifted one step ─── */
+  --ink-000: #11111b;
+  --ink-050: #181825;
+  --ink-100: #1e1e2e;
+  --ink-150: #2a2a3c;
+  --ink-200: #313244;
+  --ink-250: #3b3c50;
+  --ink-300: #45475a;
+  --ink-950: #0b0b12;
+
+  /* ── Text ────────────────────────────────────────────────────────────── */
+  --paper: #f5e0e6;   /* 17.3:1 on --ink-000 */
+  --dim: #bac2de;     /* 10.6:1 on --ink-000 */
+  --dimmer: #9399b2;  /*  6.7:1 on --ink-000, AA for body text */
+
+  /* ── The one accent ─────────────────────────────────────────────────── */
+  --accent: #f5bde6;
+  --accent-dim: #f5c2e7;
+  --accent-ink: #1e1e2e;
+
+  /* ── States. Never colour alone: each ships with a label. ────────────── */
+  --ok: #b4befe;
+  --warn: #fab387;
+  --bad: #f38ba8;
+
+  /* ── Type ────────────────────────────────────────────────────────────── */
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Cantarell, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* ── Shape ───────────────────────────────────────────────────────────── */
+  --r-panel: 14px;
+  --r-control: 9px;
+  --r-modal: 18px;
+  --r-pill: 999px;
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ── Depth. Shadows are tinted to the surface hue, never pure black. ─── */
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.035) inset, 0 18px 38px -26px rgba(6, 4, 10, 0.95);
+  --shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 40px 90px -40px rgba(4, 2, 8, 1);
+
+  /* ── Layout ──────────────────────────────────────────────────────────── */
+  --bar-h: 60px;
+  --rail-w: 320px;
+  --panel-w: 400px;
+
+  /* ── Hero ink ──────────────────────────────────────────────────────────
+     The hero background is a light gradient, so the light text tokens
+     cannot be used on it. Measured against the gradient's two stops:
+
+       --paper #f5e0e6   4.22:1 on #BB377D, 1.07:1 on #FBD3E9
+       --dim   #bac2de   3.00:1 on #BB377D, 1.32:1 on #FBD3E9
+       --dimmer #9399b2  1.88:1 on #BB377D, 2.10:1 on #FBD3E9
+
+     Hero text is dark ink instead. There is a hard ceiling worth knowing:
+     #BB377D is too light for ANY colour to reach 4.5:1 on, pure black
+     included, which tops out at 3.96:1. So hero copy is set large enough
+     to clear the 3:1 large-text bar rather than pretending to meet the
+     4.5:1 body-copy bar, which is unreachable here.
+     --- */
+  --hero-ink: #1a0512;       /* 3.68:1 on #BB377D, the darkest stop */
+  --hero-ink-soft: #4a1030;  /* secondary; only safe above the bottom third */
+
+  /* ── Z-index scale. Referenced by name, never by an arbitrary number. ── */
+  --z-base: 0;
+  --z-bar: 20;
+  --z-skip: 80;
+
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/*
+ * Components that set their own `display` outrank the user-agent
+ * `[hidden] { display: none }` rule, so toggling `hidden` from JS would
+ * silently do nothing on them. `.page` is excluded on purpose: deck.css and
+ * the contact-sheet layout both need to override `hidden` on deck pages, and
+ * deck.css already handles that rule itself.
+ */
+[hidden]:not(.page) { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--ink-000);
+  color: var(--paper);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * The hero background covers the entire viewport, not just the hero.
+ *
+ * It used to be painted on `.hero`, which begins one bar-height down — under the
+ * floating navbar. That left the strip behind the bar showing the body's own
+ * near-black, so the navbar appeared to sit on a black rim rather than float over
+ * the page. Moving the gradient up to the top of the viewport is what makes the bar
+ * read as floating: there is nothing behind it but gradient.
+ *
+ * A fixed layer rather than a background on `body`, so the ramp is always measured
+ * against the screen and not against however tall the document happens to grow.
+ * Scoped to idle on purpose: once a run starts the page is a dark work surface and
+ * the hero becomes a side panel, which paints its own ground.
+ */
+body[data-view="idle"]::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: #FBD3E9;  /* fallback for old browsers */
+  background: -webkit-linear-gradient(to bottom, #FBD3E9, #BB377D);  /* Chrome 10-25, Safari 5.1-6 */
+  background: linear-gradient(to bottom, #FBD3E9, #BB377D); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+}
+
+/* Numbers are always mono. It signals "this is a measurement". */
+.mono, code, samp {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86em;
+}
+
+code {
+  background: var(--ink-150);
+  border: 1px solid var(--ink-200);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.84em;
+}
+
+a { color: inherit; }
+
+:where(a, button, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 5px;
+}
+
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.skip {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  z-index: var(--z-skip);
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 10px 16px;
+  font-weight: 600;
+  border-radius: 0 0 var(--r-control) 0;
+}
+.skip:focus { left: 0; }
+
+/* ── App bar ──────────────────────────────────────────────────────────── */
+
+/*
+ * A floating navbar. There is no bar.
+ *
+ * `.appbar` keeps its full `--bar-h` height and its sticky position and draws
+ * nothing at all — no background, no border, no scrim — because a dozen rules
+ * offset against `--bar-h` to sit under it: the rail, the hero panel, the running
+ * scrim. Giving up the height would mean re-measuring all of them; giving up the
+ * paint costs nothing. The chrome is the tab inside it and nothing else.
+ *
+ * `pointer-events: none` lets clicks fall through the strip either side of the tab,
+ * so the tab is the only thing up there that intercepts a click. The tab opts back
+ * in.
+ */
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-bar);
+  height: var(--bar-h);
+  flex: none;
+  pointer-events: none;
+}
+
+/*
+ * Wide, and inset far enough to read as floating rather than as a bar with
+ * rounded ends: a clear gap of page either side of it, brand at the left end and
+ * the links at the right. Capped rather than fluid so it stays one object on a
+ * wide monitor instead of stretching to the bezel.
+ */
+.appbar-inner {
+  pointer-events: auto;
+  height: 44px;
+  max-width: 1060px;
+  margin: 8px auto 0;
+  padding: 0 7px 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: rgba(11, 11, 18, 0.82);
+  border: 1px solid var(--ink-200);
+  border-radius: var(--r-pill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 18px 40px -24px rgba(4, 3, 10, 0.95);
+}
+
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.brand-mark { width: 26px; height: 26px; flex: none; }
+.brand-mark rect { fill: var(--accent); }
+.brand-mark path { fill: var(--accent-ink); }
+
+.brand-name { font-weight: 640; letter-spacing: -0.015em; font-size: 15.5px; }
+
+.appbar-context {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  animation: fade-in 0.3s var(--ease) both;
+}
+
+.context-name {
+  font-size: 13px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* ── Social links ──────────────────────────────────────────────────────── */
+
+/*
+ * Sized off the tab's own height rather than set in absolute pixels, so they
+ * cannot drift out of step with it if `--bar-h` is retuned.
+ */
+.appbar-social {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  padding-left: 12px;
+  border-left: 1px solid var(--ink-200);
+}
+
+.social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-pill);
+  color: var(--dim);
+  transition: color 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.social-link svg { width: 17px; height: 17px; display: block; }
+.social-link:hover { color: var(--paper); background: var(--ink-150); }
+.social-link:active { transform: translateY(1px); }
+
+/* ── Layout ───────────────────────────────────────────────────────────── */
+
+.layout {
+  flex: 1;
+  width: 100%;
+  max-width: 1720px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  align-items: start;
+  align-content: start;
+  gap: 0;
+}
+
+.rail {
+  position: sticky;
+  top: var(--bar-h);
+  align-self: start;
+  /* The rail is content-sized, but its divider has to read as a full-height
+     edge of the layout rather than stopping wherever the last field does. */
+  min-height: calc(100dvh - var(--bar-h));
+  max-height: calc(100dvh - var(--bar-h));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 22px 32px;
+  border-right: 1px solid var(--ink-150);
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-300) transparent;
+}
+
+.rail-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.stage {
+  min-width: 0;
+  padding: 24px 32px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Fields ───────────────────────────────────────────────────────────── */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.field-label {
+  display: block;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.field-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.field-value {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  transition: color 0.2s var(--ease);
+}
+
+.field-help {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dimmer);
+}
+
+.field-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--bad);
+}
+
+input[type="text"],
+select {
+  width: 100%;
+  min-width: 0;
+  background: var(--ink-950);
+  color: var(--paper);
+  border: 1px solid var(--ink-300);
+  border-radius: var(--r-control);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+
+input[type="text"]::placeholder { color: var(--dimmer); opacity: 1; }
+
+input[type="text"]:hover,
+select:hover { border-color: var(--ink-250); }
+
+input[type="text"]:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  outline: none;
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6.5 8 10.5l4-4' fill='none' stroke='%23bac2de' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  background-size: 16px 16px;
+  padding-right: 34px;
+  cursor: pointer;
+}
+
+.select-wrap { position: relative; }
+
+/* A control that cannot do anything should not look actionable. */
+.field[data-disabled="true"] .field-value,
+.field[data-disabled="true"] .field-label { color: var(--dimmer); }
+.field[data-disabled="true"] input { opacity: 0.55; }
+
+/* ── Range: guide length ──────────────────────────────────────────────── */
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--ink-200);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--ink-200);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--ink-950);
+  transition: transform 0.14s var(--ease);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--ink-950);
+  transition: transform 0.14s var(--ease);
+}
+
+input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb { transform: scale(1.14); }
+input[type="range"]:active:not(:disabled)::-webkit-slider-thumb { transform: scale(0.94); }
+input[type="range"]:focus-visible { outline: none; }
+input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 26%, transparent); }
+input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 26%, transparent); }
+input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Segmented control: output mode ───────────────────────────────────── */
+
+.segmented {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  padding: 2px;
+  background: var(--ink-950);
+  border: 1px solid var(--ink-300);
+  border-radius: var(--r-control);
+}
+
+/* The indicator is one element moved with a transform rather than two styled
+   states, so switching reads as a movement instead of a repaint. */
+.segmented::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  border-radius: 7px;
+  background: var(--ink-150);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  transition: transform 0.28s var(--ease);
+}
+
+.segmented:has(input[value="compare"]:checked)::before { transform: translateX(100%); }
+
+.segmented label { position: relative; }
+
+.segmented input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segmented span {
+  position: relative;
+  display: block;
+  text-align: center;
+  padding: 8px 4px;
+  font-size: 13px;
+  color: var(--dim);
+  border-radius: 7px;
+  transition: color 0.22s var(--ease);
+}
+
+.segmented input:checked + span { color: var(--paper); font-weight: 560; }
+.segmented input:hover:not(:checked) + span { color: var(--paper); }
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+
+.btn-primary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 12px 20px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  font: inherit;
+  font-weight: 640;
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: filter 0.18s var(--ease), transform 0.12s var(--ease), box-shadow 0.18s var(--ease);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 12px 26px -18px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
+.btn-primary:active:not(:disabled) { transform: translateY(1px); }
+.btn-primary:disabled { cursor: progress; opacity: 0.72; }
+
+.btn-spinner {
+  display: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.btn-primary[data-busy="true"] .btn-spinner { display: block; }
+.btn-primary[data-busy="true"] .btn-label { opacity: 0.85; }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  padding: 6px 13px;
+  background: transparent;
+  color: var(--dim);
+  border: 1px solid var(--ink-300);
+  border-radius: var(--r-pill);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.btn-ghost:hover { color: var(--paper); border-color: var(--ink-250); background: var(--ink-100); }
+.btn-ghost:active { transform: translateY(1px); }
+
+.btn-ghost svg { width: 14px; height: 14px; flex: none; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  background: transparent;
+  color: var(--dim);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.icon-btn:hover { color: var(--paper); background: var(--ink-150); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+/* ── Example chips ────────────────────────────────────────────────────── */
+
+.examples { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.chip {
+  padding: 5px 12px;
+  background: var(--ink-100);
+  color: var(--dim);
+  border: 1px solid var(--ink-200);
+  border-radius: var(--r-pill);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.chip:hover { color: var(--paper); background: var(--ink-150); border-color: var(--ink-300); }
+.chip:active { transform: translateY(1px); }
+
+/* ── Composer ─────────────────────────────────────────────────────────── */
+
+.composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  /* A run takes one company. The field does not need the whole stage, and a
+     1000px input is a worse target than a 900px one. */
+  max-width: 920px;
+  padding: 16px;
+  background: var(--ink-050);
+  border: 1px solid var(--ink-200);
+  border-radius: var(--r-panel);
+  box-shadow: var(--shadow-panel);
+  transition: border-color 0.22s var(--ease);
+}
+
+.composer:focus-within { border-color: var(--ink-300); }
+
+.composer-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.composer-icon {
+  position: absolute;
+  left: 13px;
+  width: 16px;
+  height: 16px;
+  color: var(--dimmer);
+  pointer-events: none;
+  transition: color 0.2s var(--ease);
+}
+
+.composer-input:focus-within .composer-icon { color: var(--accent); }
+
+.composer input[type="text"] {
+  height: 46px;
+  padding-left: 39px;
+  font-size: 15px;
+}
+
+.composer .btn-primary { min-width: 158px; }
+
+/* The helper sits under the row rather than beside it, so the composer stays
+   one line tall at every width down to a phone. */
+.composer-help { grid-column: 1 / -1; margin: 0; }
+
+.composer[data-invalid="true"] { border-color: color-mix(in srgb, var(--bad) 55%, var(--ink-200)); }
+
+.alert {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 11px;
+  padding: 13px 15px;
+  border: 1px solid;
+  border-radius: var(--r-panel);
+  animation: alert-in 0.34s var(--ease) both;
+}
+
+.alert-icon { width: 16px; height: 16px; margin-top: 2px; flex: none; }
+.alert-icon svg { width: 16px; height: 16px; display: block; }
+
+.alert-body { min-width: 0; }
+.alert-body p { margin: 0; font-size: 14px; line-height: 1.5; }
+.alert-body p + p { margin-top: 5px; font-size: 13px; color: var(--dim); }
+.alert-body code { font-size: 12px; }
+
+.alert-action {
+  flex: none;
+  align-self: center;
+}
+
+.alert[data-kind="error"] { background: #2d1a22; border-color: #5c2f3c; color: var(--paper); }
+.alert[data-kind="error"] .alert-icon { color: var(--bad); }
+.alert[data-kind="warn"] { background: #2d2620; border-color: #5c4a2f; color: var(--paper); }
+.alert[data-kind="warn"] .alert-icon { color: var(--warn); }
+.alert[data-kind="info"] { background: var(--ink-050); border-color: var(--ink-300); color: var(--paper); }
+.alert[data-kind="info"] .alert-icon { color: var(--accent); }
+
+/* ── Document header ──────────────────────────────────────────────────── */
+
+.output { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.output:empty { display: none; }
+
+/* ── Comparison view ──────────────────────────────────────────────────── */
+
+/*
+ * The type scale is the whole complaint.
+ *
+ * Measured over the rendered view, 56 of 61 text elements sat at 11 or 12 pixels,
+ * most of them monospace, and the cards had no padding of their own: a row of
+ * measurements was separated from the next by a one-pixel hairline and nothing
+ * else. It read as a data dump rather than a document.
+ *
+ * So: the floor is 12, body copy is 13-14, and the numbers that carry a result
+ * are the largest thing in their cell. Cards now have padding and a gap, and the
+ * cells have room to be read in.
+ */
+.bench { display: flex; flex-direction: column; gap: 24px; }
+
+.bench-card {
+  background: var(--ink-050);
+  border: 1px solid var(--ink-200);
+  border-radius: var(--r-panel);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+  animation: rise-in 0.42s var(--ease) both;
+}
+
+.bench-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 26px;
+  border-bottom: 1px solid var(--ink-150);
+}
+
+.bench-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 620;
+  letter-spacing: -0.012em;
+}
+
+.bench-head p { margin: 0; font-size: 13px; color: var(--dimmer); }
+
+.bench-body { padding: 0; }
+.bench-body-pad { padding: 24px 26px 26px; }
+
+/* The subject is the output's title. The document header that used to carry it
+   is gone, so this is the largest type in the view and is sized like one. */
+.bench-subject {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 620;
+  letter-spacing: -0.024em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.bench-how {
+  margin: 10px 0 0;
+  max-width: 68ch;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--dim);
+}
+
+/* The opening card is a title, not a section, so it is not divided from its own
+   body by a rule. */
+.bench-card:first-child .bench-head {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+
+/* ── The signal matrix ──────────────────────────────────────────────────── */
+
+.matrix { width: 100%; border-collapse: collapse; table-layout: fixed; }
+
+.matrix th,
+.matrix td {
+  padding: 20px 18px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--ink-150);
+}
+
+.matrix thead th {
+  position: sticky;
+  /* Under the app bar, not under the viewport: the bar is sticky too, so top: 0
+     would slide the header row behind it. */
+  top: var(--bar-h);
+  background: var(--ink-050);
+  z-index: var(--z-base);
+  border-bottom: 1px solid var(--ink-200);
+}
+
+.matrix tr:last-child th,
+.matrix tr:last-child td { border-bottom: 0; }
+
+.matrix .axis {
+  width: 132px;
+  font-size: 11.5px;
+  font-weight: 620;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dim);
+  background: var(--ink-050);
+}
+
+.matrix-brand { display: grid; gap: 4px; min-width: 0; }
+
+.matrix-brand b {
+  font-size: 15px;
+  font-weight: 620;
+  letter-spacing: -0.012em;
+  overflow-wrap: anywhere;
+}
+
+.matrix-brand span {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dimmer);
+  overflow-wrap: anywhere;
+}
+
+.matrix-brand.is-subject b::after {
+  content: "subject";
+  margin-left: 9px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  vertical-align: 2px;
+}
+
+.cell-value {
+  display: block;
+  font-size: 14px;
+  color: var(--paper);
+  line-height: 1.45;
+}
+
+.cell-note {
+  display: block;
+  margin-top: 7px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--dimmer);
+  line-height: 1.5;
+}
+
+.cell-unreadable { color: var(--dimmer); font-style: italic; }
+
+/* The brand's own line, quoted. Nothing invented: this is the headline the
+   site's metadata carried. */
+.cell-quote {
+  margin: 0 0 12px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--paper);
+  text-wrap: pretty;
+}
+
+/* Big enough to be recognised as the brand's colours rather than as six dots. */
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.swatches i {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.type-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+
+.type-list li {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--paper);
+  overflow-wrap: anywhere;
+}
+
+.type-list li em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dimmer);
+  margin-left: 7px;
+}
+
+/* ── Distinctiveness ────────────────────────────────────────────────────── */
+
+.diff-list { display: flex; flex-direction: column; }
+
+.diff-row {
+  display: grid;
+  /* Wide enough for the band to sit under the number without wrapping. The band
+     is the longest word in the view, and it used to break across two lines in a
+     62px column, which made the score look like two numbers. */
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 190px) 152px;
+  gap: 24px;
+  align-items: center;
+  padding: 20px 26px;
+  border-bottom: 1px solid var(--ink-150);
+}
+
+.diff-row:last-child { border-bottom: 0; }
+
+.diff-who { min-width: 0; display: grid; gap: 5px; }
+
+.diff-who b { font-size: 15px; font-weight: 620; letter-spacing: -0.012em; overflow-wrap: anywhere; }
+.diff-who span { font-size: 13.5px; color: var(--dim); line-height: 1.5; }
+
+/*
+ * The meter gets a track.
+ *
+ * It was a two-pixel line with nothing behind it, so it read as a stray rule
+ * rather than as a proportion. On a track, how far along the bar is becomes
+ * readable at a glance, which is the only reason it is there at all: the numeral
+ * carries the value.
+ */
+.diff-meter {
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--ink-200);
+  overflow: hidden;
+}
+
+.diff-meter i {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+.diff-score {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.diff-score .diff-score {
+  font-size: 22px;
+  line-height: 1.1;
+  color: var(--paper);
+}
+
+.diff-band {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Positioning ────────────────────────────────────────────────────────── */
+
+.terms { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 16px; }
+
+.term {
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--ink-100);
+  border: 1px solid var(--ink-200);
+  color: var(--dim);
+}
+
+.term[data-tone="owned"] { color: var(--paper); border-color: color-mix(in srgb, var(--accent) 34%, transparent); }
+
+.pos-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--ink-150);
+}
+
+.pos-cell { padding: 24px 26px 26px; background: var(--ink-100); }
+
+.pos-cell h4 {
+  margin: 0 0 7px;
+  font-size: 11.5px;
+  font-weight: 620;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.pos-cell p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--dim); }
+
+/* ── How each name resolved ─────────────────────────────────────────────── */
+
+.resolved-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+
+.resolved-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: baseline;
+  font-size: 14px;
+}
+
+.resolved-list a {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--dim);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid transparent;
+}
+
+.resolved-list a:hover { color: var(--accent); border-bottom-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+.resolved-list em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  white-space: nowrap;
+}
+
+.resolved-list li[data-ok="false"] a { color: var(--bad); }
+
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+
+.foot {
+  flex: none;
+  border-top: 1px solid var(--ink-150);
+  background: var(--ink-050);
+}
+
+.foot-line {
+  max-width: 1720px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  font-size: 12px;
+  color: var(--dimmer);
+}
+
+/* ── Loading skeleton ─────────────────────────────────────────────────── */
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.skeleton-bar {
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--ink-150) 0%,
+    var(--ink-200) 40%,
+    var(--ink-150) 80%
+  );
+  background-size: 240% 100%;
+  animation: shimmer 1.5s var(--ease-in-out) infinite;
+}
+
+/* ── Keyframes ────────────────────────────────────────────────────────── */
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes alert-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-5px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Hero
+
+   The whole product is one field and one search bar. The run options, the
+   empty state and the footer are all still in the document and still bound;
+   `body[data-view]` only takes them off screen, so putting them back is
+   one attribute.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.hero {
+  position: relative;
+  /* Viewport minus the appbar, which is in flow above it. A full 100dvh hero
+     under a sticky bar makes the first screen 60px taller than the screen. */
+  min-height: calc(100dvh - var(--bar-h));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 96px 24px 72px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/*
+ * The idle hero paints nothing. Its background is the full-viewport gradient on
+ * `body[data-view="idle"]::after`, which reaches the top of the screen as well as
+ * this element. Every other view does need its own ground — the running panel is
+ * dark chrome — so the paint moves there rather than being deleted.
+ */
+body:not([data-view="idle"]) .hero {
+  background: #FBD3E9;  /* fallback for old browsers */
+  background: -webkit-linear-gradient(to bottom, #FBD3E9, #BB377D);  /* Chrome 10-25, Safari 5.1-6 */
+  background: linear-gradient(to bottom, #FBD3E9, #BB377D); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+}
+
+.hero-inner {
+  position: relative;
+  width: 100%;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  text-align: center;
+  animation: rise-in 0.6s var(--ease) both;
+}
+
+/*
+ * The headline is the hero's, and the hero is only a landing page while idle.
+ *
+ * Both were originally switched off together, on the brief that the hero was one
+ * search bar and a button. The headline earns its place back because it is the one
+ * line that says what the thing does — the bar only asks for input — but it is
+ * scoped to idle rather than restored globally: once a run starts that same element
+ * is the top of a 400px side panel, where a 62px line becomes five lines of
+ * dark-on-dark stacked above the controls.
+ */
+.hero-title,
+.hero-note { display: none; }
+
+body[data-view="idle"] .hero-title { display: block; }
+
+.hero-title {
+  margin: 0;
+  /* The measure is set so the line breaks after "in", which is where the promise
+     turns from what you get to how you get it. Left to `text-wrap: balance` over a
+     wider column it drifted to three lines and the hero stopped being one glance. */
+  max-width: 28ch;
+  color: var(--hero-ink);
+  /* The 30px floor is a line-count constraint, not a taste one. The hero column is
+     capped at 860px, so on a 430px phone the headline has about 380px to work
+     with; any larger and "Generate brand guidelines in a single click." breaks into
+     three lines, which is the thing that makes a headline read as a paragraph. */
+  font-size: clamp(30px, 5.8vw, 62px);
+  font-weight: 640;
+  line-height: 1.05;
+  letter-spacing: -0.038em;
+  text-wrap: balance;
+}
+
+/* ── Mode tabs ─────────────────────────────────────────────────────────── */
+
+.hero-tabs {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(11, 11, 18, 0.72);
+  border: 1px solid var(--ink-300);
+  border-radius: var(--r-pill);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.hero-tab {
+  padding: 7px 20px;
+  background: transparent;
+  color: var(--dim);
+  border: 0;
+  border-radius: var(--r-pill);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 560;
+  cursor: pointer;
+  transition: background 0.24s var(--ease), color 0.24s var(--ease);
+}
+
+.hero-tab:hover { color: var(--paper); }
+
+.hero-tab[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 640;
+}
+
+/* ── The search bar ────────────────────────────────────────────────────── */
+
+.hero-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 780px;
+}
+
+/*
+ * The pill. Dark, fully rounded, and it carries three things: the field, the
+ * compare split, and the read depth. The depth lives here rather than in a
+ * row of settings because depth is a property of the search, not a preference
+ * that outlives it.
+ */
+.search-pill {
+  position: relative;
+  /*
+   * The pill has to be able to lift its own dropdown above the bar.
+   *
+   * `backdrop-filter` below makes this element a stacking context, and a stacking
+   * context traps its descendants: the depth menu's z-index of 20 only competes
+   * with things inside the pill, never with the CTA beside it. That CTA is a later
+   * sibling at z-index auto, so it wins on paint order and the menu is drawn
+   * underneath it — in the panel, where the bar stacks and the menu lands on top of
+   * the button, the options cannot be seen at all.
+   *
+   * Lifting the whole pill moves its stacking context, menu included, back in
+   * front of the CTA. It stays under the app bar, which is z-index 20.
+   */
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 62px;
+  padding: 0 7px 0 20px;
+  background: rgba(11, 11, 18, 0.82);
+  border: 1px solid var(--ink-300);
+  border-radius: var(--r-pill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 24px 60px -30px rgba(4, 3, 10, 1);
+  transition: border-color 0.24s var(--ease), box-shadow 0.24s var(--ease);
+}
+
+/* No focus ring on the pill. The caret in the field already says where typing
+   goes, so a box around it is a second answer to a question that is not open. */
+.search-pill:focus-within {
+  border-color: var(--ink-300);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 24px 60px -30px rgba(4, 3, 10, 1);
+}
+
+.pill-icon {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--dimmer);
+  transition: color 0.24s var(--ease);
+}
+
+.search-pill:focus-within .pill-icon { color: var(--accent); }
+
+.pill-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/*
+ * The fields inside the pill are text, not inputs, as far as the eye is
+ * concerned: the pill supplies the shape and the edge, so these carry none of
+ * their own. Every property the generic `input[type="text"]` rule sets is
+ * cancelled explicitly rather than by relying on source order, because that
+ * rule has the same specificity as `.pill-fields input` and whichever one is
+ * written last wins. Leaving it to ordering is how a bordered box around a
+ * transparent field appeared inside this pill.
+ */
+.pill-fields input,
+.pill-fields input:focus,
+.pill-fields input:focus-visible {
+  flex: 1;
+  min-width: 0;
+  height: 60px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  color: var(--paper);
+  font: inherit;
+  font-size: 16px;
+  letter-spacing: -0.005em;
+  appearance: none;
+}
+
+.pill-fields input:focus,
+.pill-fields input:focus-visible { outline: none; }
+
+.pill-fields input::placeholder { color: var(--dimmer); opacity: 1; }
+
+/* The compare split: subject, a rule, then the competitors. */
+.pill-split {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pill-vs {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  border-radius: var(--r-pill);
+}
+
+/* ── The depth control ──────────────────────────────────────────────────
+
+   No fill and no border of its own. A dark segment inside an already dark pill
+   reads as a second, smaller input sitting in the first one, and its edge looks
+   like a permanent shadow rather than like a control. What is left is the label
+   and the caret, which is all a mode switch needs. */
+.pill-select {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+/*
+ * The native select is only a value holder: the form, the value mirror and the
+ * submit all read it. It is hidden by cancelling every part of the generic
+ * `select` rule rather than by opacity alone, because an element with a border
+ * and an opaque background is one rendering difference away from showing up as a
+ * stray dark box inside the pill.
+ */
+.pill-select-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pill-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 44px;
+  padding: 0 12px 0 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  color: var(--dim);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 560;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.pill-select-trigger:hover { color: var(--paper); background: var(--ink-150); }
+
+.pill-select-trigger:focus-visible {
+  outline: 2px solid var(--paper);
+  outline-offset: 1px;
+  color: var(--paper);
+}
+
+.pill-caret {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--dimmer);
+  transition: transform 0.24s var(--ease);
+}
+
+.pill-select-trigger[aria-expanded="true"] .pill-caret { transform: rotate(180deg); }
+.pill-select-trigger[aria-expanded="true"] { color: var(--paper); }
+
+/* The menu. Styled to the pill, not to the OS, because a native popup cannot
+   be styled at all. */
+.pill-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: var(--z-bar);
+  min-width: 100%;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  background: var(--ink-100);
+  border: 1px solid var(--ink-300);
+  border-radius: var(--r-control);
+  box-shadow: 0 18px 40px -16px rgba(4, 3, 10, 0.9);
+  animation: menu-in 0.18s var(--ease) both;
+}
+
+.pill-menu-option {
+  padding: 9px 14px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: var(--dim);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s var(--ease), color 0.14s var(--ease);
+}
+
+.pill-menu-option:hover { background: var(--ink-150); color: var(--paper); }
+
+.pill-menu-option[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--paper);
+  font-weight: 600;
+}
+
+/* Keyboard focus inside the menu is the same target as pointer hover. */
+.pill-menu-option:focus-visible {
+  outline: none;
+  background: var(--ink-150);
+  color: var(--paper);
+}
+
+/* The CTA sits beside the pill, not inside it, so the pill stays a field and
+   the commit stays a distinct action. */
+.hero-cta {
+  min-width: 168px;
+  height: 62px;
+  border-radius: var(--r-pill);
+  flex: none;
+}
+
+.hero-note {
+  margin: -8px 0 0;
+  color: var(--hero-ink);
+  /* 19px rather than 13.5. The gradient's darkest stop cannot carry small
+     text at any colour, so hero copy is sized to clear the 3:1 large-text
+     threshold instead of the 4.5:1 body one. */
+  font-size: 19px;
+  line-height: 1.5;
+}
+
+.hero-error {
+  margin: -14px 0 0;
+  /* --bad is a light rose and lands at 1.2:1 on the light end of the gradient,
+     so hero errors use a deep wine that stays readable at every stop. */
+  color: #6d0b3a;
+  font-size: 19px;
+  font-weight: 560;
+}
+
+/* ── Hero view: everything below the fold of the hero is taken off screen ── */
+
+body[data-view] .rail,
+body[data-view] .foot,
+body[data-view] #composer { display: none !important; }
+
+/* The stage is a single column in every view: the hero is the panel, the stage
+   is the document, and there is no third column. */
+body[data-view] .layout {
+  display: block;
+  max-width: none;
+}
+
+body[data-view] .stage {
+  padding: 0 24px 72px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/*
+ * Idle, the stage has nothing in it.
+ *
+ * The hero is already a full viewport tall, so an empty stage below it is not
+ * "a little space", it is 72px of phantom scroll that makes the page look
+ * draggable while there is nothing to scroll to. Taking it out of flow is the
+ * whole fix.
+ *
+ * This is why the empty state no longer has a view of its own: the hero already
+ * is the "point it at a website" screen, so a second one underneath it would say
+ * the same thing twice.
+ */
+body[data-view="idle"] .layout {
+  display: none;
+}
+
+/* ── The panel: the hero, after a run starts ─────────────────────────── */
+
+/*
+ * The morph is a FLIP, not a CSS transition between two layouts.
+ *
+ * CSS cannot animate between "centred in a full-height hero" and "docked to the
+ * left edge" without animating layout properties, which the compositor cannot
+ * do. So app.js measures the hero before and after the class change and plays
+ * the difference as a transform. Everything below is therefore just the two
+ * END states; the motion between them belongs to script.
+ *
+ * data-view is on <body> and set by script: idle | running | done.
+ */
+
+.hero-inner {
+  transform-origin: top left;
+  will-change: transform;
+}
+
+/*
+ * While a run is in flight the hero becomes a left-hand panel.
+ *
+ * It has to leave the flow to do that. The hero is a sibling of the stage, not
+ * an ancestor, so as long as both are in normal flow the stage can only ever sit
+ * below it and the panel would push the document a screen down. Fixed positioning
+ * takes the panel out and lets the stage reserve its width with padding instead.
+ */
+body[data-view="running"] .hero {
+  position: fixed;
+  top: var(--bar-h);
+  bottom: 0;
+  left: 0;
+  width: var(--panel-w);
+  justify-content: flex-start;
+  align-items: stretch;
+  min-height: 0;
+  padding: 0;
+  z-index: 2;
+}
+
+/* With the hero only as wide as the panel, the gradient it used to carry has to
+   move up to the page, or the main area loses its backdrop. The scrim on top is
+   what lets the reveal read against it: the grid is dark grey on a light rose
+   ground, which is close to invisible without one. */
+body[data-view="running"]::before {
+  content: "";
+  position: fixed;
+  inset: var(--bar-h) 0 0 0;
+  z-index: 0;
+  background:
+    linear-gradient(to bottom, rgba(10, 3, 12, 0.42), rgba(10, 3, 12, 0.8)),
+    linear-gradient(to bottom, #FBD3E9, #BB377D);
+  pointer-events: none;
+}
+
+body[data-view="running"] .hero {
+  background: var(--ink-050);
+  border-right: 1px solid var(--ink-200);
+}
+
+body[data-view="running"] .hero-inner {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 18px;
+  padding: 28px 24px 32px;
+  text-align: left;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-300) transparent;
+}
+
+/*
+ * The panel does not fade in, it morphs.
+ *
+ * `rise-in` is the hero's entrance on first paint. Leaving it on during the
+ * transition would put a second, unrelated transform on the same element as the
+ * FLIP, and its children would each run their own entrance a beat into a morph
+ * that is meant to already be over.
+ */
+body[data-view="running"] .hero-inner,
+body[data-view="running"] .hero-inner > * {
+  animation: none;
+}
+
+/*
+ * The tab strip keeps its own width in the panel.
+ *
+ * The panel stretches its children so the search bar and the button fill the
+ * column. That is right for them and wrong for the tabs: the track is an
+ * inline-flex that sizes to its two labels in the centred hero, and stretching
+ * it to the full panel width leaves a wide empty run beside the active pill,
+ * which still hugs its own label. The strip would then be a different size in the
+ * panel than it was a moment before the morph, which is the one thing a morph is
+ * not supposed to do.
+ */
+body[data-view="running"] .hero-tabs {
+  align-self: flex-start;
+}
+
+/*
+ * The bar stacks in the panel. Side by side, the pill and the button need about
+ * 520px and the panel has 352, so the flex row crushes the pill down to nothing
+ * and only its non-shrinking dropdown survives. Stacked, the pill gets the
+ * full width and the button gets its own row.
+ */
+body[data-view="running"] .hero-bar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  max-width: none;
+}
+
+body[data-view="running"] .hero-cta {
+  min-width: 0;
+  width: 100%;
+}
+
+/*
+ * The comparison pill stacks in the panel.
+ *
+ * Side by side, "brand", "vs" and "brand" want about 600px, and the panel has
+ * 351. In the centred hero that fits comfortably; docked into a panel it does not,
+ * and the row simply refuses to shrink, so the pill bursts out of the panel and
+ * the controls stop lining up with it. Letting the fields stack is the same thing
+ * the bar already does for the button, and it keeps one field per row, which is
+ * easier to read and to tap than two sharing a 62px line.
+ *
+ * Only when the second field is actually there: a guide's single field keeps the
+ * full-height pill it has everywhere else.
+ */
+body[data-view="running"] .search-pill:has(.pill-split:not([hidden])) {
+  height: auto;
+  padding: 7px 10px 7px 16px;
+  /*
+   * Still centred, so the depth control keeps the place in the pill it has in
+   * every other mode.
+   *
+   * This used to be `flex-start`, which lined the control up with the first field
+   * once the two fields stacked — and moved it onto the pill's top edge in the
+   * process. The control is a rounded pill of its own, and a small rounded pill
+   * sitting at the top of a taller rounded pill reads as two controls rather than
+   * one, so simply adding the second field visibly shifted it. Centring costs
+   * nothing: the fields are on the left and the control on the right, so the two
+   * never have to share a line.
+   */
+  align-items: center;
+}
+
+body[data-view="running"] .search-pill:has(.pill-split:not([hidden])) .pill-fields {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+/*
+ * The fields stop flexing.
+ *
+ * `flex: 1` exists so the inputs share a row of the pill's width. Stacked, the
+ * main axis is height instead, so it hands that out too and the declared 30px is
+ * ignored — the two fields end up whatever the trigger's height divides into.
+ * `flex: none` puts the height back in charge.
+ */
+body[data-view="running"] .search-pill:has(.pill-split:not([hidden])) .pill-fields input,
+body[data-view="running"] .search-pill:has(.pill-split:not([hidden])) .pill-split {
+  flex: none;
+  height: 30px;
+}
+
+/*
+ * The depth control comes down to the field height so its own rounded shape is the
+ * same size as the rows it sits beside, and the icon is centred on the pill rather
+ * than riding the first field's line, which is no longer the pill's middle.
+ */
+body[data-view="running"] .search-pill:has(.pill-split:not([hidden])) .pill-select-trigger {
+  height: 30px;
+}
+
+body[data-view="running"] .search-pill:has(.pill-split:not([hidden])) .pill-vs {
+  /* Between two stacked fields the "vs" is decoration, not a third column. */
+  display: none;
+}
+
+/* The stage moves aside so the document and the reveal sit beside the panel
+   rather than under it. */
+body[data-view="running"] .stage {
+  position: relative;
+  z-index: 1;
+  min-height: calc(100dvh - var(--bar-h));
+  padding-top: 40px;
+  /* The panel is a sibling of the stage, not an ancestor, so the stage reserves
+     its width here rather than living inside a grid cell. */
+  padding-left: calc(var(--panel-w) + 24px);
+}
+
+/* ── The processing state ───────────────────────────────────────────────── */
+
+/*
+ * Centred in every view, the panel included.
+ *
+ * The panel override that used to set `align-items: flex-start` lined the orb up
+ * with the left-aligned text above it, which left a 168px circle hanging off one
+ * side of a 351px panel with nothing balancing it. The orb is the thing the panel
+ * exists to show while a run is in flight, so it sits in the middle of the panel:
+ * the label centres with it, and the label is shrink-to-fit, so inheriting the
+ * panel's left text alignment does not pull it back out.
+ */
+.run-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  animation: fade-in 0.4s var(--ease) both;
+}
+
+.run-orb {
+  display: block;
+  width: 168px;
+  height: 168px;
+  max-width: 100%;
+}
+
+.run-status-label {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 560;
+  letter-spacing: -0.005em;
+  color: var(--paper);
+}
+
+/* ── The output box ─────────────────────────────────────────────────────── */
+
+/*
+ * One frame, two occupants.
+ *
+ * The frame is the size of a rendered guide page, 4:3, because a page is
+ * 1200x900. That is not a coincidence: deck.js fits its fixed canvas by setting
+ * the viewport height to 900 * (width / 1200), so at any width the deck's box is
+ * exactly the box this frame describes. The grid can therefore stand in for the
+ * guide in the same space rather than beside it, and uncovering it is a change of
+ * what is painted, not a change of where anything is.
+ *
+ * The frame is also what holds the box open before there is anything to show.
+ * A comparison has no pages and no grid, so with the frame gone the output
+ * section would have no height at all.
+ */
+.outbox {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.outbox-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--r-panel);
+  overflow: hidden;
+  background: var(--ink-050);
+  border: 1px solid var(--ink-200);
+}
+
+/* A comparison is a table of measurements, not a page, so once it is there it
+   brings its own height and must not be boxed at 4:3. */
+.outbox[data-mode="compare"] .outbox-frame {
+  aspect-ratio: auto;
+  background: none;
+  border: 0;
+  overflow: visible;
+}
+
+/* But while the grid is standing on it, the box belongs to the grid, and the
+   grid needs a box: 4:3, the shape of a page. Without this the frame would have
+   no height at all during a comparison, because the only thing inside it is the
+   empty output host, and the grid would have nothing to fill. */
+.outbox[data-mode="compare"]:has(.outbox-canvas[data-on]) .outbox-frame {
+  aspect-ratio: 4 / 3;
+  background: var(--ink-050);
+  border: 1px solid var(--ink-200);
+  overflow: hidden;
+}
+
+/*
+ * The grid sits on top of the deck, not under it.
+ *
+ * Absolute, filling the frame, so it covers exactly the page box and leaves the
+ * toolbar above it clickable while the guide is being uncovered. It is painted
+ * last, which is what puts it on top without z-index.
+ */
+.outbox-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.45s var(--ease);
+}
+
+.outbox-canvas[data-on] {
+  opacity: 1;
+}
+
+/* ── The toolbar above the output ───────────────────────────────────────── */
+
+/*
+ * The viewer chrome is the tool's, not the brand's. --ink-150 for the fill and
+ * --ink-300 for the edge put it on the same ladder as the panel beside it, so a
+ * page and the thing acting on it read as one surface.
+ */
+.outbox-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  background: var(--ink-100);
+  border: 1px solid var(--ink-200);
+  border-radius: var(--r-panel);
+}
+
+.outbox-bar:empty {
+  display: none;
+}
+
+.outbox-turn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.outbox-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 34px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--ink-150);
+  border: 1px solid var(--ink-300);
+  color: var(--dim);
+  border-radius: var(--r-control);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease),
+              color 0.18s var(--ease), transform 0.12s var(--ease);
+}
+
+.outbox-btn svg { width: 16px; height: 16px; }
+
+.outbox-btn:hover:not(:disabled) {
+  background: var(--ink-200);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--paper);
+}
+
+.outbox-btn:active:not(:disabled) { transform: translateY(1px); }
+.outbox-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.outbox-jump {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.outbox-jump-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+}
+
+.outbox-select {
+  min-width: 150px;
+  max-width: 240px;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--ink-150);
+  border: 1px solid var(--ink-300);
+  color: var(--paper);
+  border-radius: var(--r-control);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.outbox-select:hover { border-color: var(--ink-250); background-color: var(--ink-200); }
+.outbox-select option { background: var(--ink-100); color: var(--paper); }
+
+/* Export sits at the far end, so it reads as the last thing you can do with the
+   document rather than the first. */
+.outbox-export {
+  position: relative;
+  margin-left: auto;
+}
+
+.outbox-caret svg {
+  width: 12px;
+  height: 12px;
+  color: var(--dimmer);
+  transition: transform 0.18s var(--ease);
+}
+
+.outbox-btn-export[aria-expanded="true"] .outbox-caret svg { transform: rotate(180deg); }
+
+/*
+ * A menu rather than seven chips on show.
+ *
+ * Themed dark, because the platform's own dropdown would arrive in whatever the
+ * OS thinks a menu looks like and ignore every token above.
+ */
+.outbox-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 200px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--ink-100);
+  border: 1px solid var(--ink-300);
+  border-radius: var(--r-control);
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.9);
+  animation: menu-in 0.14s var(--ease) both;
+}
+
+.outbox-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--dim);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+
+.outbox-menu-item:hover,
+.outbox-menu-item:focus-visible {
+  background: var(--ink-200);
+  color: var(--paper);
+  outline: none;
+}
+
+/* ── Alerts float ───────────────────────────────────────────────────────── */
+
+/*
+ * Out of the flow and out of the way.
+ *
+ * Fixed to the corner, so a note about the extraction never occupies the output
+ * section or pushes the document down the page when it appears.
+ */
+.toasts {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 60;
+  width: min(420px, calc(100vw - 40px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toasts:empty { display: none; }
+
+.toast {
+  position: relative;
+  pointer-events: auto;
+  animation: alert-in 0.24s var(--ease) both;
+}
+
+.toast-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--dimmer);
+  cursor: pointer;
+}
+
+.toast-close svg { width: 12px; height: 12px; }
+.toast-close:hover { background: var(--ink-200); color: var(--paper); }
+
+
+/* ── Hero, responsive ──────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .hero { padding: 72px 16px 56px; min-height: 92dvh; }
+  .hero-inner { gap: 20px; }
+  .hero-bar { flex-direction: column; align-items: stretch; }
+  .search-pill { height: 58px; padding-left: 16px; }
+  .pill-fields input { height: 56px; font-size: 16px; }
+  .hero-cta { width: 100%; height: 54px; }
+  .pill-select-trigger { height: 40px; font-size: 13px; padding: 0 10px 0 12px; }
+  .pill-fields { flex-direction: column; align-items: stretch; gap: 0; }
+  .pill-split { padding-top: 2px; }
+  .pill-fields input[type="text"]:last-child { height: 40px; font-size: 14px; }
+  .pill-vs { padding: 1px 7px; font-size: 10px; }
+
+  body[data-view] .stage { padding: 0 14px 48px; }
+}
+/* ── Responsive: every multi-column block collapses explicitly ─────────── */
+
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: 1fr; }
+
+  /* The composer is the action, so on a narrow screen it comes first and the
+     options follow it. Source order is the reverse, so order is explicit. */
+  .stage { order: 1; padding: 20px 22px 56px; }
+  .rail { order: 2; position: static; max-height: none; border-right: 0; border-top: 1px solid var(--ink-150); padding: 22px; }
+
+  .pos-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  :root { --bar-h: 56px; }
+
+  /* The bar is 56px here, so the tab gives up 4px of its own height and the gap
+     above it shrinks to match. The cap is dropped: on a phone there is no width to
+     cap, and the side margins are what make it read as floating. */
+  .appbar-inner {
+    height: 40px;
+    max-width: none;
+    margin: 6px 12px 0;
+    padding: 0 6px 0 11px;
+    gap: 10px;
+  }
+  .appbar-social { padding-left: 9px; }
+  .social-link { width: 28px; height: 28px; }
+  .social-link svg { width: 15px; height: 15px; }
+  .brand-name { font-size: 15px; }
+  .appbar-context { gap: 8px; }
+
+  .rail { padding: 20px 16px 24px; }
+  .stage { padding: 16px 14px 44px; }
+  .foot-line { padding: 13px 16px; }
+
+  /*
+   * There is no room beside a panel on a phone, so it stops being a side panel
+   * and becomes a full-width band across the top: controls and the orb, then the
+   * reveal below it.
+   *
+   * It also goes back into normal flow. Fixed positioning is what lets the stage
+   * sit *beside* the panel on a wide screen, by reserving the panel's width as
+   * padding. Here the panel is above the stage instead, and its height is set by
+   * its contents, so there is no number to reserve. Letting it flow is simpler
+   * than measuring it and it cannot get out of step with the content.
+   */
+  body[data-view="running"] .hero {
+    position: relative;
+    top: auto;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    width: auto;
+    min-height: 0;
+    /*
+     * Deliberately no `z-index` here, so the panel keeps the `z-index: 2` the
+     * desktop rule gives it. Dropping it to 1 put the panel level with the stage,
+     * and the stage is later in the document, so it won on paint order.
+     *
+     * And it stops clipping.
+     *
+     * On a phone the hero is a band across the top, so its bottom edge sits just
+     * below the search bar — and the `overflow: hidden` the idle hero needs in
+     * order to contain its own backdrop cut the depth menu off at that edge. The
+     * last option was never drawn, and the stage behind it showed through the gap.
+     * Nothing else in here overflows: the orb is a canvas bounded by its own box,
+     * and the panel's background and border belong to the element itself.
+     *
+     * This is the outer half of what the rule below already does for `.hero-inner`.
+     */
+    overflow: visible;
+  }
+
+  body[data-view="running"] .hero-inner {
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--ink-200);
+    overflow: visible;
+  }
+
+  body[data-view="running"] .stage {
+    padding-left: 14px;
+    padding-top: 24px;
+    min-height: 0;
+  }
+
+  .composer {
+    grid-template-columns: 1fr;
+    padding: 14px;
+    gap: 10px;
+  }
+  .composer .btn-primary { min-width: 0; }
+
+  /*
+   * The matrix has one column per brand, so it cannot narrow much past a readable
+   * cell. It scrolls sideways instead.
+   *
+   * The width has to come off with !important: signalMatrix writes it inline from
+   * the brand count, and an inline width makes the element itself 700px wide
+   * inside a 360px card. That makes the *scroll container* the thing that
+   * overflows, the card's overflow: hidden then clips it, and the competitors are
+   * cut off with no way to reach them. With the width off, the element is the
+   * phone's width and the rows inside it carry the floor.
+   */
+  .matrix {
+    display: block;
+    width: auto !important;
+    min-width: 0 !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .matrix thead,
+  .matrix tbody {
+    display: table;
+    width: 660px;
+    table-layout: fixed;
+  }
+
+  .matrix .axis { width: 116px; white-space: nowrap; }
+
+  /* A title and its note side by side squeeze both into two or three words each.
+     Stacked, each of them is readable. */
+  .bench-head { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+  .diff-row { grid-template-columns: minmax(0, 1fr) auto; gap: 12px 14px; }
+  .diff-meter { grid-column: 1 / -1; }
+  .diff-score { grid-column: 2; grid-row: 1; }
+  .diff-score .diff-band { white-space: normal; }
+
+  .outbox-bar { gap: 8px 10px; padding: 8px; }
+  .outbox-export { margin-left: 0; }
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .bench-card,
+  .alert,
+  .appbar-context,
+  .skeleton-bar,
+  .pill-menu,
+  .run-status,
+  .toast,
+  .outbox-menu {
+    animation: none !important;
+  }
+
+  .outbox-canvas { transition: none !important; }
+
+  .pill-caret { transition-duration: 0.001ms; }
+
+  .btn-spinner {
+    animation-duration: 1.4s !important;
+  }
+
+  .segmented::before { transition-duration: 0.001ms; }
+}
+
+/* ── Print: the guide only. The tool is not part of the document. ──────── */
+
+/*
+ * Printing is the PDF export, so this block has to hold up as a document rather
+ * than as a screenshot of the app.
+ *
+ * Everything here is `!important` or keyed on `body[data-view]` for one reason:
+ * the rules it has to undo are the panel's, and those are attribute-keyed and so
+ * outrank a bare class. Without the override the stage keeps the padding that
+ * reserves room for the panel, and every page prints a panel's width to the left
+ * of the content and a strip of nothing down the right.
+ */
+@media print {
+  .appbar,
+  .rail,
+  .composer,
+  .hero,
+  .foot,
+  .outbox-bar,
+  .outbox-canvas,
+  .toasts,
+  .skip { display: none !important; }
+
+  /* The gradient backdrop is painted by a pseudo-element on the body, so hiding
+     the panel does not touch it. Left in, it prints behind the document. */
+  body[data-view]::before { display: none !important; }
+
+  body { background: #fff; }
+
+  body[data-view] .layout { display: block; max-width: none; }
+  body[data-view] .stage {
+    padding: 0 !important;
+    min-height: 0;
+    max-width: none;
+  }
+
+  .outbox-frame {
+    border: 0;
+    border-radius: 0;
+    aspect-ratio: auto;
+    background: none;
+    overflow: visible;
+  }
+}
