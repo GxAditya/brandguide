@@ -1,15 +1,10 @@
 /**
- * The shared crawl.
- *
- * Everything downstream needs the same five things: a resolved URL, the
- * document head, the stylesheets, the manifest, and a page corpus. This module
- * gathers them once so the four endpoints stay genuinely different in what they
- * *do with* the result, rather than re-fetching the same site four times.
- *
- * Stages that do not depend on each other run concurrently.
+ * The shared crawl. Everything downstream needs a resolved URL, the head, the
+ * stylesheets, the manifest and a page corpus, so it is gathered once here rather
+ * than re-fetched per endpoint. Independent stages run concurrently.
  */
 
-import { classifyInput, normaliseUrl } from '../resolve/input.js';
+import { classifyInput } from '../resolve/input.js';
 import { resolveFromSearch } from '../resolve/domain.js';
 import { fetchHead } from '../crawl/head.js';
 import { fetchStylesheets } from '../crawl/css.js';
@@ -21,7 +16,6 @@ import { explainError, isRequestLevel } from '../tinyfish/errors.js';
  * Depth controls how many *pages* are read. Stylesheets are always read broadly:
  * a framework site routinely spreads one brand token set across 40+ files with
  * opaque build hashes, so a small cap silently loses the palette entirely.
- * Reading all of them costs a handful of batched Fetch calls and ~300KB.
  */
 export const DEPTHS = {
   quick: { pages: 0, sheets: 50 },
@@ -29,11 +23,7 @@ export const DEPTHS = {
   deep: { pages: 10, sheets: 60 },
 };
 
-/**
- * @param {import('../tinyfish/client.js').TinyFishClient} client
- * @param {string} rawInput URL or company name
- * @param {{ depth?: 'quick'|'standard'|'deep', onProgress?: (e: object) => void }} [opts]
- */
+
 export async function collect(client, rawInput, opts = {}) {
   const depthKey = DEPTHS[opts.depth] ? opts.depth : 'standard';
   const depth = DEPTHS[depthKey];
@@ -52,9 +42,8 @@ export async function collect(client, rawInput, opts = {}) {
   // --- 2. Head and homepage, both needed to plan the rest -------------------
   let crawl = await readSite(client, resolution.url, depth, progress, warnings);
 
-  // If a name resolved to a domain that cannot be read — a bot wall, a dead
-  // host, a parked domain — try the next candidate Search offered before
-  // giving up. One unreadable pick should not fail the whole run.
+  // If a name resolved to a domain that cannot be read — a bot wall, a dead host, a
+  // parked domain — try the next candidate Search offered before giving up.
   const alternatives = (resolution.candidates || [])
     .map((c) => c.url)
     .filter((url) => url && url !== crawl.url);
@@ -68,49 +57,18 @@ export async function collect(client, rawInput, opts = {}) {
     }
   }
 
-  const finalUrl = crawl.url;
-  const head = crawl.head;
   const { pages } = crawl;
 
-  if (pages.length === 1 && !head && pages[0]?.error) {
-    throw noReadableContent(finalUrl, pages[0]);
+  if (pages.length === 1 && !crawl.head && pages[0]?.error) {
+    throw noReadableContent(crawl.url, pages[0]);
   }
-
-  // --- 4. Stylesheets and manifest, in parallel -----------------------------
-  progress({ stage: 'assets', status: 'start' });
-  const [css, manifest] = await Promise.all([
-    head?.stylesheets?.length
-      ? fetchStylesheets(client, head.stylesheets, { cap: depth.sheets }).catch((err) => {
-          warnings.push(`Could not read stylesheets: ${err.message}`);
-          return { sheets: [], totalBytes: 0, skipped: [] };
-        })
-      : Promise.resolve({ sheets: [], totalBytes: 0, skipped: [] }),
-    fetchManifest(client, head?.manifestUrl || null, finalUrl).catch(() => null),
-  ]);
-
-  // Summarise stylesheet failures rather than emitting one warning per file.
-  if (css.skipped?.length) {
-    const reasons = countBy(css.skipped, (s) => s.reason);
-    warnings.push(
-      `${css.skipped.length} stylesheet(s) could not be read (${Object.entries(reasons)
-        .map(([reason, n]) => `${n}× ${reason}`)
-        .join(', ')})`,
-    );
-  }
-  progress({
-    stage: 'assets',
-    status: 'done',
-    sheets: css.sheets.length,
-    bytes: css.totalBytes,
-    manifest: Boolean(manifest),
-  });
 
   return {
     input: { given: rawInput, kind: classified.kind, ...resolution },
-    url: finalUrl,
-    head,
-    manifest,
-    css,
+    url: crawl.url,
+    head: crawl.head,
+    manifest: crawl.manifest,
+    css: crawl.css,
     pages,
     readablePages: pages.filter((p) => p.ok),
     depth: depthKey,
@@ -118,11 +76,7 @@ export async function collect(client, rawInput, opts = {}) {
   };
 }
 
-/**
- * Read one site: head, homepage, the pages it links to, then its stylesheets
- * and manifest. Never throws for a single page failing, so the caller can decide
- * whether the attempt succeeded.
- */
+/** Read one site: head, homepage, linked pages, then stylesheets and manifest. */
 async function readSite(client, url, depth, progress, warnings, { quiet = false } = {}) {
   const announce = quiet ? () => {} : progress;
 
@@ -139,8 +93,8 @@ async function readSite(client, url, depth, progress, warnings, { quiet = false 
         url,
         ok: false,
         error: err.message,
-        // Keep the code: readSite flattens this to text, and collect() needs the
-        // code to tell an auth failure apart from a site that blocks crawlers.
+        // collect() needs the code to tell an auth failure apart from a site
+        // that blocks crawlers.
         errorCode: err.code || null,
         html: '',
         links: [],
@@ -225,26 +179,11 @@ async function readSite(client, url, depth, progress, warnings, { quiet = false 
   };
 }
 
-/** Resolve without crawling — used by /compare for fast domain checks. */
-export async function resolveOnly(client, rawInput) {
-  const classified = classifyInput(rawInput);
-  if (classified.kind === 'url') return normaliseUrl(classified.url);
-  const resolved = await resolveFromSearch(client, classified.name);
-  return resolved.url;
-}
-
 /**
- * Build the "we could not read this site" error without lying about why.
- *
- * The tempting single message here is "this site may block automated visitors",
- * and it was what shipped. But a bad API key and a bot wall look identical at
- * this point in the pipeline: both leave us with zero pages and no head. Blaming
- * the site sent people off to try different URLs while the real fault was an
- * expired key. So the underlying per-URL code decides the code and the wording.
- *
- * @param {string} url
- * @param {{ error?: string, errorCode?: string }} page the homepage that failed
- * @param {string[]} warnings
+ * Build the "we could not read this site" error without lying about why. A bad API
+ * key and a bot wall look identical at this point: both leave zero pages and no
+ * head, and blaming the site sends people off to try other URLs while the real fault
+ * is an expired key. The per-URL code decides the wording.
  */
 function noReadableContent(url, page) {
   const causeCode = page.errorCode || null;
@@ -256,7 +195,6 @@ function noReadableContent(url, page) {
     const detail = explainError(causeCode);
     message = `Could not start the crawl: ${detail} No site can be read until this is fixed.`;
   } else if (causeCode) {
-    // TinyFish told us why, so say that rather than guessing at a bot wall.
     message = `Could not read any content from ${url}: ${explainError(causeCode, { url })}`;
   } else {
     message = `Could not read any content from ${url}. If this site blocks automated visitors, try a different URL.`;

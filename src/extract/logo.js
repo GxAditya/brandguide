@@ -1,14 +1,10 @@
 /**
  * Logo extraction and verification.
  *
- * Two jobs:
- *   1. Gather candidates from real signals — SVG icon links, apple-touch-icon,
- *      og:image, web app manifest icons, and conventional favicon paths.
- *   2. Verify each candidate by asking TinyFish Fetch to read it. A URL that
- *      404s or returns no extractable content is dropped.
- *
- * The second job is the point: it is the difference between "a marketer gets a
- * dead link" and "a marketer gets an asset they can actually drop in a deck".
+ * Candidates come from real signals (icon links, og:image, manifest icons,
+ * conventional favicon paths), then each is read back through TinyFish Fetch: the
+ * difference between handing a marketer a dead link and an asset they can drop in a
+ * deck is the whole job.
  */
 
 import { verifyAssets, conventionalIconUrls } from '../crawl/assets.js';
@@ -24,18 +20,9 @@ const FORMAT_HINTS = [
   { ext: '.gif', format: 'gif', bonus: -4, note: 'animated raster' },
 ];
 
-const SIZE_PARS = /(\d{2,4})\s*[x×]\s*(\d{2,4})/;
 
-/**
- * @param {object} input
- * @param {object} input.head parsed head
- * @param {object|null} input.manifest web app manifest
- * @param {string} input.pageUrl
- * @param {string[]} [input.pageImageLinks] images found on the page body
- * @param {import('../tinyfish/client.js').TinyFishClient} client
- */
 export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [], client }) {
-  const origin = safeOrigin(pageUrl);
+  const origin = assetOrigin(pageUrl);
   const candidates = [];
 
   // --- Manifest icons: the most deliberate statement of "this is my logo" ----
@@ -68,7 +55,7 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
       const px = largestSquare(icon.sizes);
       if (px) score += Math.min(px, 512) / 10;
     }
-    if (icon.url && origin && icon.url.startsWith(origin)) score += 6; // same-origin first-party asset
+    if (icon.url && origin && icon.url.startsWith(origin)) score += 6;
 
     candidates.push({ url: icon.url, kind: rel.includes('apple-touch') ? 'logo' : 'icon', score, reason, declaredSize: icon.sizes || null });
   }
@@ -93,9 +80,9 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
     candidates.push({
       url,
       kind: 'logo',
-      // Deliberately below head- and manifest-declared assets. A page image
-      // whose *filename* says "logo" is often a campaign mark — Patagonia's
-      // one-percent-logo.svg outscored its actual brand assets this way.
+      // Deliberately below head- and manifest-declared assets: a page image whose
+      // *filename* says "logo" is often a campaign mark, which is how Patagonia's
+      // one-percent-logo.svg outscored its actual brand assets.
       score: looksLikeLogo ? 48 + hint.bonus : 18,
       reason: looksLikeLogo
         ? 'page image with "logo" in its filename, weaker evidence than a declared icon'
@@ -113,28 +100,19 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
   const shortlist = ranked.slice(0, 10);
   const { verified, rejected } = await verifyAssets(client, shortlist);
 
-  /*
-   * Read the SVG source for the best candidates.
-   *
-   * Done after verification, not before, so only assets already proven to exist
-   * are read a second time. Without this, every `currentColor` logo renders as a
-   * flat black shape, because an image cannot inherit from the page.
-   */
+  // Read the SVG source only for assets already proven to exist, so nothing is
+  // fetched twice. Without this every `currentColor` logo renders as a flat
+  // black shape, because an image cannot inherit from the page.
   const svgRead = await attachSvgSource(client, verified);
 
   const sorted = verified.sort((a, b) => b.score - a.score);
   const primary = sorted.find((c) => c.format === 'svg') || sorted.find((c) => c.kind === 'logo') || sorted[0] || null;
 
-  /*
-   * The best mark and the best lockup are usually different assets.
-   *
-   * `primary` is deliberately SVG-first, because a vector mark is what belongs on
-   * a swatch or a favicon-sized surface. But the SVG in a document head is
-   * almost always the app icon: Tailwind's is a dark rounded square, which is
-   * invisible on a dark plate and is not the logo a reader recognises. The lockup
-   * lives in the page body or the og:image instead, and that is what a cover and
-   * a logotype page need.
-   */
+  // `primary` is SVG-first because a vector mark is what belongs on a swatch, but
+  // the SVG in a document head is almost always the app icon — Tailwind's is a
+  // dark rounded square, invisible on a dark plate and not the logo a reader
+  // recognises. The lockup lives in the page body or the og:image, and that is
+  // what a cover and a logotype page need.
   const lockup = findLockup(sorted) || primary;
 
   const enriched = sorted.map((c, index) => ({
@@ -144,7 +122,7 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
     reason: c.reason,
     declaredSize: c.declaredSize || null,
     origin: assetOrigin(c.url),
-    firstParty: assetOrigin(c.url) === safeOrigin(pageUrl),
+    firstParty: assetOrigin(c.url) === origin,
     rank: index + 1,
     verifiedBy: 'tinyfish-fetch',
     // Present only when the source was readable and safe to inline.
@@ -158,10 +136,10 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
     .slice(0, 5);
 
   return {
-    primary: primary ? describeLogo(primary, pageUrl) : null,
+    primary: primary ? describeLogo(primary, origin) : null,
     // Null when it is the same asset, so a consumer can tell "no lockup found"
     // apart from "the lockup happens to be the mark".
-    lockup: lockup && lockup !== primary ? describeLogo(lockup, pageUrl) : null,
+    lockup: lockup && lockup !== primary ? describeLogo(lockup, origin) : null,
     alternates,
     rejected: rejected.slice(0, 4).map((r) => ({ url: r.url, reason: r.reason })),
     source: {
@@ -181,14 +159,11 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
 const LOCKUP_NAME = /logo|wordmark|logotype|brandmark|brand[-_]?logo|header[-_]?logo/i;
 
 /**
- * The verified asset most likely to be the full logo, mark plus wordmark.
- *
- * Ordered by how strong the signal is: a declared aspect ratio of 2.2 or wider
- * is a horizontal lockup outright, then a filename that says so, then the social
- * card, which is by construction a rendered lockup. A square app icon is never
- * chosen unless nothing else survived verification.
+ * The verified asset most likely to be the full logo, by signal strength: aspect
+ * ratio of 2.2 or wider, then a filename that says so, then the social card, which
+ * is by construction a rendered lockup.
  */
-function findLockup(sorted) {
+export function findLockup(sorted) {
   const described = sorted.map((c) => ({ candidate: c, described: describeLogo(c, '') }));
 
   const byRatio = described.find(({ described: d }) => d.type.includes('lockup'));
@@ -201,15 +176,13 @@ function findLockup(sorted) {
   return social ? social.candidate : null;
 }
 
-export { findLockup };
-
-function describeLogo(candidate, pageUrl) {
+function describeLogo(candidate, pageOrigin) {
   const enriched = {
     url: candidate.url,
     format: candidate.format,
     reason: candidate.reason,
     origin: assetOrigin(candidate.url),
-    firstParty: assetOrigin(candidate.url) === safeOrigin(pageUrl),
+    firstParty: assetOrigin(candidate.url) === pageOrigin,
     verifiedBy: 'tinyfish-fetch',
     // Present only when the source was readable and safe to inline.
     svg: candidate.svg || null,
@@ -217,7 +190,7 @@ function describeLogo(candidate, pageUrl) {
   };
   return {
     ...enriched,
-    type: guessType(enriched, pageUrl),
+    type: guessType(enriched),
     minifiedCss: `@media (min-aspect-ratio: ${Math.max(1, Math.round((enriched.pixelWidth || 300) / (enriched.pixelHeight || 100)))}/100) { .brand-logo { aspect-ratio: ${enriched.pixelWidth || 300}/${enriched.pixelHeight || 100} } }`,
   };
 }
@@ -293,14 +266,6 @@ function largestSquare(sizes) {
 }
 
 function assetOrigin(url) {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
-}
-
-function safeOrigin(url) {
   try {
     return new URL(url).origin;
   } catch {

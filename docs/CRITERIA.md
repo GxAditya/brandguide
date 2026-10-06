@@ -13,9 +13,9 @@ no scraping library.
 There are exactly two outbound sockets in the codebase:
 
 - `src/tinyfish/client.js` → the target web, via TinyFish Search and Fetch
-- `src/pipeline/llm-gemini.js` and `src/pipeline/llm-openai.js` → the *configured
-  LLM endpoint*, and only when you set `GEMINI_API_KEY` or the `LLM_*` trio. They
-  never touch a target site.
+- `src/pipeline/llm-gemini.js` and `src/pipeline/llm-openai.js` → the *caller's
+  chosen LLM endpoint*, and only when they send an `X-BrandKit-Llm-Key` header.
+  They never touch a target site.
 
 ```bash
 grep -rn "fetch(\|https\.get\|http\.request\|axios\|cheerio\|puppeteer\|playwright" src --include="*.js"

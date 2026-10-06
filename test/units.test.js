@@ -13,7 +13,7 @@ import {
 
 import {
   stripComments, parseCustomProperties, resolveCustomProperty, parseFontFaces,
-  splitFontStack, findColourOccurrences, parseRadii, parseTypeSizes,
+  splitFontStack, findColourOccurrences, parseTypeSizes,
 } from '../src/lib/css.js';
 
 import { classifyInput, normaliseUrl, rootHost, sameSite, InputError } from '../src/resolve/input.js';
@@ -231,15 +231,14 @@ test('splitFontStack separates families and drops var() references', () => {
 });
 
 test('findColourOccurrences counts hex, rgb and hsl literals', () => {
-  const { counts } = findColourOccurrences('.a{color:#fff}.b{color:#fff}.c{color:#7070ff}.d{color:rgb(1,2,3)}.e{color:hsl(0,0%,0%)}');
+  const counts = findColourOccurrences('.a{color:#fff}.b{color:#fff}.c{color:#7070ff}.d{color:rgb(1,2,3)}.e{color:hsl(0,0%,0%)}');
   assert.equal(counts.get('#fff'), 2);
   assert.equal(counts.get('#7070ff'), 1);
   assert.ok(counts.has('rgb(1,2,3)'), 'rgb literal must be counted');
   assert.ok(counts.has('hsl(0,0%,0%)'));
 });
 
-test('parseRadii and parseTypeSizes handle minified CSS', () => {
-  assert.equal(parseRadii('.a{border-radius:6px}.b{border-radius:6px}.c{border-radius:999px}').get('6px'), 2);
+test('parseTypeSizes handles minified CSS', () => {
   assert.deepEqual(parseTypeSizes('.a{font-size:clamp(1rem,2vw,2rem)}.b{font-size:14px}').map((s) => s.clamp), [true, false]);
 });
 

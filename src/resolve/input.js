@@ -1,9 +1,7 @@
 /**
- * Input normalisation: turn whatever the user typed into either a URL or a
- * company name to hand to TinyFish Search.
- *
- * No brand list, no TLD list, no hardcoded domains. The only knowledge here is
- * about URL *shape*.
+ * Input normalisation: turn whatever the caller typed into either a URL or a
+ * company name to hand to TinyFish Search. No brand list, no TLD list, no
+ * hardcoded domains — the only knowledge here is about URL *shape*.
  */
 
 const PRIVATE_HOST_PATTERNS = [
@@ -51,7 +49,6 @@ const looksLikeUrl = (s) => {
 };
 
 /**
- * @param {string} raw
  * @returns {{ kind: 'url'|'name', url?: string, name?: string, original: string }}
  */
 export function classifyInput(raw) {
@@ -66,8 +63,7 @@ export function classifyInput(raw) {
 
   // Strip conversational filler at both ends, so "the website for linear" and
   // "linear official site" both resolve to "linear".
-  let changed = true;
-  while (changed) {
+  let changed = true;  while (changed) {
     changed = false;
 
     const leading = value.replace(LEADING_FILLER, '');
@@ -156,12 +152,9 @@ export function rootHost(url) {
   } catch {
     return '';
   }
-  const multi = /^(?:[^.]+\.)?(?:co|com|org|net|gov|edu|ac|or|ne)\.[a-z]{2}$/.test(host);
-  if (multi) {
-    const parts = host.split('.');
-    return parts.slice(-3).join('.');
-  }
   const parts = host.split('.');
+  const multi = /^(?:[^.]+\.)?(?:co|com|org|net|gov|edu|ac|or|ne)\.[a-z]{2}$/.test(host);
+  if (multi) return parts.slice(-3).join('.');
   return parts.length > 2 ? parts.slice(-2).join('.') : host;
 }
 

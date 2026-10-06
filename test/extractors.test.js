@@ -620,21 +620,11 @@ test('real prose that begins with a capital still counts', () => {
   assert.ok(analyseCopy(html, 'https://x.test').ok);
 });
 
-test('buildDesignTokens skips radius values that are not radii', () => {
-  const tokens = buildDesignTokens({
-    colors: GUIDE.colors,
-    typography: GUIDE.typography,
-    shape: { radii: [{ value: 'inherit', count: 9 }, { value: 'var(--radius-rounded)', count: 4 }, { value: '6px', count: 12 }, { value: '999px', count: 3 }] },
-  });
-  assert.deepEqual(Object.keys(tokens.radius).sort(), ['6', '999']);
-});
-
-test('render accepts both "colors" and "colours" so every endpoint can export', () => {
-  // /api/v1/identity names the section "colours"; a brand guide names it
-  // "colors". Both must produce a CSS export with colour tokens.
-  const identityShaped = { ...GUIDE, colors: undefined, colours: GUIDE.colors, identity: undefined, url: 'https://acme.test/' };
-  const css = render('css', identityShaped);
-  assert.match(css.body, /--color-primary: #7070ff/);
+test('buildDesignTokens carries colour roles and the neutral ramp', () => {
+  const tokens = buildDesignTokens({ colors: GUIDE.colors, typography: GUIDE.typography });
+  assert.equal(tokens.colour.primary.value, '#7070ff');
+  assert.ok(Object.keys(tokens.colour).some((name) => name.startsWith('neutral-')));
+  assert.equal(tokens.colour.primary.declared, true);
 });
 
 // ── Identity naming ──────────────────────────────────────────────────────────

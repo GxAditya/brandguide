@@ -1,16 +1,11 @@
 /**
- * Web app manifest reading. A manifest is usually the most honest statement of
- * a brand's own colour intent: it names theme_color and ships the icon set.
- *
- * TinyFish Fetch returns JSON documents as raw text, so this is one more Fetch
- * call rather than a special case.
+ * Web app manifest reading. A manifest is usually the most honest statement of a
+ * brand's own colour intent: it names theme_color and ships the icon set. Fetch
+ * returns JSON documents as raw text, so this is one more call rather than a
+ * special case.
  */
 
-/**
- * @param {import('../tinyfish/client.js').TinyFishClient} client
- * @param {string|null} manifestUrl
- * @param {string} baseUrl
- */
+
 export async function fetchManifest(client, manifestUrl, baseUrl) {
   if (!manifestUrl) return null;
 

@@ -22,8 +22,6 @@ import { fileURLToPath } from 'node:url';
 
 import { TinyFishClient } from '../src/tinyfish/client.js';
 import { buildBrandGuide } from '../src/pipeline/brand-guide.js';
-import { buildIdentity } from '../src/pipeline/identity-deep.js';
-import { buildVoiceReport } from '../src/pipeline/voice-deep.js';
 import { compareBrands } from '../src/pipeline/compare.js';
 import { render } from '../src/export/index.js';
 import { validate, BRAND_GUIDE_SCHEMA } from '../src/schema.js';
@@ -48,9 +46,6 @@ const COMPARE_SET = ['linear', 'notion', 'asana'];
 const args = process.argv.slice(2);
 const onlyIndex = args.indexOf('--only');
 const only = onlyIndex === -1 ? null : args[onlyIndex + 1];
-const skipVoice = args.includes('--fast');
-
-const BRAND_CACHE = new Map();
 
 function slug(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -61,8 +56,9 @@ function hr(label) {
 }
 
 async function main() {
-  if (!process.env.TINYFISH_API_KEY) {
-    process.stderr.write('\nTINYFISH_API_KEY is not set. Create a key at https://agent.tinyfish.ai/api-keys\n\n');
+  const apiKey = process.env.TINYFISH_API_KEY || '';
+  if (!apiKey) {
+    process.stderr.write('\nNo TinyFish key. Set TINYFISH_API_KEY for this run, or create a free one at https://agent.tinyfish.ai/api-keys\n\n');
     process.exit(1);
   }
 
@@ -79,6 +75,7 @@ async function main() {
   for (const brand of brands) {
     hr(`BRAND GUIDE — ${brand.name}  (${brand.note})`);
     const client = new TinyFishClient({
+      apiKey,
       onCall: (call) => {
         const label = String(call.label).slice(0, 46).padEnd(46);
         process.stdout.write(`  ${label} ${String(call.durationMs).padStart(6)}ms  ${call.surface}\n`);
@@ -95,7 +92,6 @@ async function main() {
       continue;
     }
     const elapsed = Date.now() - started;
-    BRAND_CACHE.set(brand.name, guide);
 
     // 1. Schema self-check: the output must satisfy the published contract.
     const schemaErrors = validate(guide, BRAND_GUIDE_SCHEMA);
@@ -133,48 +129,7 @@ async function main() {
     process.stdout.write(`  wrote ${Object.keys(files).length} files to demo-output/${slug(brand.name)}/\n`);
   }
 
-  // The other two endpoints, on the first successful brand.
-  const subject = brands.find((b) => BRAND_CACHE.has(b.name));
-  if (subject) {
-    const guide = BRAND_CACHE.get(subject.name);
-
-    hr(`IDENTITY — ${subject.name}  (design tokens for Figma / Tailwind)`);
-    try {
-      const identity = await buildIdentity(new TinyFishClient(), guide.identity.url, { depth: 'deep' });
-      const dir = join(OUT, slug(subject.name));
-      await writeFile(join(dir, 'identity.json'), JSON.stringify(identity, null, 2), 'utf8');
-      process.stdout.write(`  ${identity.tokenGraph.total} custom properties read from ${identity.provenance.read} stylesheets\n`);
-      process.stdout.write(`  ${identity.tokenGraph.literalTokens} literal, ${identity.tokenGraph.aliasTokens} alias\n`);
-      process.stdout.write(`  ${identity.exports.figma.variables.length} Figma variables generated\n`);
-      for (const row of identity.contrast) {
-        process.stdout.write(`  ${String(row.ratio).padStart(6)}:1  ${row.use.padEnd(34)} ${row.verdict}\n`);
-      }
-    } catch (err) {
-      process.stdout.write(`  FAILED: ${err.message}\n`);
-    }
-
-    if (!skipVoice) {
-      hr(`VOICE — ${subject.name}  (sentence-level analysis)`);
-      try {
-        const voice = await buildVoiceReport(new TinyFishClient(), guide.identity.url, { depth: 'deep', narrate: false });
-        const dir = join(OUT, slug(subject.name));
-        await writeFile(join(dir, 'voice.json'), JSON.stringify(voice, null, 2), 'utf8');
-        process.stdout.write(`  ${voice.corpus.sentencesAnalysed} sentences from ${voice.corpus.pagesWithProse} pages\n`);
-        process.stdout.write(`  consistency: ${voice.consistency.grade} (${voice.consistency.score})\n\n`);
-        for (const descriptor of voice.voice.descriptors || []) {
-          process.stdout.write(`  ${descriptor.axis.padEnd(18)} ${String(descriptor.value).padEnd(15)} ${descriptor.note}\n`);
-        }
-        process.stdout.write('\n  DO\n');
-        for (const item of voice.guidance.do) process.stdout.write(`    · ${item.instruction} — ${item.because}\n`);
-        process.stdout.write('\n  DON\'T\n');
-        for (const item of voice.guidance.dont) process.stdout.write(`    · ${item.instruction} — ${item.because}\n`);
-      } catch (err) {
-        process.stdout.write(`  FAILED: ${err.message}\n`);
-      }
-    }
-  }
-
-  // The fourth endpoint: benchmark.
+  // The compare endpoint, on the full set.
   if (brands.length > 1 && !only) {
     hr('COMPARE — Linear vs Notion vs Asana');
     try {

@@ -22,11 +22,9 @@ const NAME_FROM_OG_SITE = (value) => {
 };
 
 /**
- * First meaningful heading on the page, which is often the brand name.
- *
- * A heading that *ends with* the brand token is a phrase about the brand, not
- * the brand: "Popular on GOV.UK" and "Welcome to GOV.UK" both qualify, and
- * neither is a name.
+ * First meaningful heading on the page, which is often the brand name. A heading
+ * that *ends with* the brand token is a phrase about the brand, not the brand:
+ * "Popular on GOV.UK" and "Welcome to GOV.UK" both qualify, and neither is a name.
  */
 const NAME_FROM_H1 = (html, host) => {
   if (!html) return null;
@@ -54,8 +52,8 @@ const NAME_FROM_H1 = (html, host) => {
  *
  * gov.uk has no h1 and titles itself "Welcome to GOV.UK", so every structural
  * source either fails or returns something wrong. Its own headings do say
- * "Popular on GOV.UK" — the name is right there, correctly capitalised. Matching
- * the domain against the page text recovers it without any brand-specific rule.
+ * "Popular on GOV.UK", so matching the domain against the page text recovers it
+ * without any brand-specific rule.
  */
 function NAME_FROM_PAGE_TEXT(html, host) {
   if (!html || !host) return null;
@@ -82,7 +80,6 @@ function escapeRegExp(value) {
  * @param {object} input.head parsed head
  * @param {object|null} input.manifest
  * @param {object[]} input.pages
- * @param {object} input.resolution { url, resolvedBy }
  */
 export function extractIdentity({ head = {}, manifest = null, pages = [], resolution = {} }) {
   const host = safeHost(resolution.url);
@@ -142,7 +139,7 @@ export function extractIdentity({ head = {}, manifest = null, pages = [], resolu
 function findLegalName(pages, fallback) {
   const corpus = pages
     .filter((p) => p.ok && /(about|legal|terms|privacy|contact|imprint)/i.test(p.url))
-    .map((p) => stripTags(p.html))
+    .map((p) => decodeText(STRIP(p.html)))
     .join(' ');
   if (!corpus) return null;
 
@@ -163,12 +160,6 @@ function findContact(pages) {
     }
     for (const link of page.links || []) {
       if (/linkedin\.com\/company\//i.test(link)) linkedin.add(link.split('?')[0]);
-      if (/twitter\.com\//i.test(link) || /x\.com\//i.test(link)) {
-        const handle = link.match(/\/(?:twitter|x)\.com\/(@?[A-Za-z0-9_]+)/i);
-        if (handle && !/^(i|home|search|share|intent)$/i.test(handle[1])) {
-          emails.size; // no-op guard
-        }
-      }
     }
   }
   return {
@@ -207,8 +198,4 @@ function safeHost(url) {
   } catch {
     return null;
   }
-}
-
-function stripTags(html) {
-  return String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 }

@@ -1,6 +1,5 @@
 /**
- * Colour maths. sRGB <-> HSL, WCAG contrast, and CIEDE2000 for the benchmark
- * endpoint. No dependencies, so these are implemented directly and tested.
+ * Colour maths: sRGB <-> HSL, WCAG contrast, and CIEDE2000 for /compare.
  */
 
 export function clamp(value, min, max) {
@@ -88,7 +87,7 @@ export function toHex({ r, g, b }) {
   return `#${[r, g, b].map((c) => clamp(Math.round(c), 0, 255).toString(16).padStart(2, '0')).join('')}`;
 }
 
-export function toRgbString({ r, g, b, a = 1 }) {
+function toRgbString({ r, g, b, a = 1 }) {
   return a >= 1
     ? `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`
     : `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${Number(a.toFixed(3))})`;
@@ -145,14 +144,9 @@ export function describeColour(rgb) {
     hsl: `hsl(${Math.round(h)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`,
     hue: Math.round(h),
     saturation: Number(s.toFixed(3)),
-    /**
-     * Max channel spread, 0-255.
-     *
-     * HSL saturation is unreliable for this job: a pale grey like `#dee2e6`
-     * reports s=0.14 because the denominator collapses near white, which would
-     * let a framework's default grey masquerade as a brand link colour. Channel
-     * spread does not lie about that.
-     */
+    // Max channel spread, 0-255. HSL saturation is unreliable here: a pale grey
+    // like #dee2e6 reports s=0.14 because the denominator collapses near white,
+    // which would let a framework's default grey pass as a brand link colour.
     chroma: Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b),
     lightness: Number(l.toFixed(3)),
     alpha: rgb.a ?? 1,
@@ -196,17 +190,15 @@ export function mix(a, b, weight = 0.5) {
 }
 
 /**
- * CIEDE2000 colour difference. Used by /compare to say how far apart two
- * brands' palettes actually are.
+ * CIEDE2000 colour difference, in Lab space.
  */
 export function deltaE2000(colour1, colour2) {
   return deltaE2000Lab(rgbToLab(colour1), rgbToLab(colour2));
 }
 
 /**
- * The same distance for colours already in CIE Lab. Exposed so the
- * implementation can be checked against the published Sharma et al. test
- * set, which is expressed in Lab.
+ * The same distance for colours already in CIE Lab, which is how the published
+ * Sharma et al. test set is expressed.
  *
  * @param {[number,number,number]} lab1 L*, a*, b*
  * @param {[number,number,number]} lab2
@@ -315,7 +307,7 @@ export function nearestNamedColour(rgb, names = CSS_COLOR_NAMES) {
 }
 
 /** CSS named colours, precomputed to Lab so nearest-name lookup stays fast. */
-export const CSS_COLOR_NAMES = [
+const CSS_COLOR_NAMES = [
   ['black', '#000000'], ['white', '#ffffff'], ['red', '#ff0000'], ['crimson', '#dc143c'],
   ['tomato', '#ff6347'], ['coral', '#ff7f50'], ['orange', '#ffa500'], ['darkorange', '#ff8c00'],
   ['amber', '#ffbf00'], ['gold', '#ffd700'], ['yellow', '#ffff00'], ['olive', '#808000'],
@@ -334,6 +326,6 @@ export const CSS_COLOR_NAMES = [
 ].map(([name, hex]) => ({ name, rgb: parseHex(hex) }));
 
 /** Named colours usable directly in CSS `font-family` / colour values. */
-export const NAMED_COLORS = Object.fromEntries(
+const NAMED_COLORS = Object.fromEntries(
   CSS_COLOR_NAMES.map(({ name, rgb }) => [name, toHex(rgb)]),
 );

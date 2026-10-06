@@ -1,30 +1,23 @@
 /**
- * TinyFish HTTP client.
+ * TinyFish HTTP client — the only place in BrandKit that touches the network.
  *
- * This is the ONLY place in BrandKit that touches the network. Every byte of
- * the target site enters the product through here.
- *
- * Two surfaces are used:
  *   Search  GET  https://api.search.tinyfish.ai/    name -> domain, competitors
- *   Fetch   POST https://api.fetch.tinyfish.ai     read pages, CSS, manifests, assets
+ *   Fetch   POST https://api.fetch.tinyfish.ai     pages, CSS, manifests, assets
  *
- * Both are free at any balance. The Browser and Agent surfaces are deliberately
- * unused: they are metered, and the spike recorded in PRD section 3 proved
- * Fetch alone is sufficient.
+ * Both are free at any balance; the Browser and Agent surfaces are metered and
+ * deliberately unused. A per-URL failure is data, never an exception; every call is
+ * timed and recorded for the provenance panel; the API key is never logged.
  *
- * Rules for this module:
- *   - a per-URL failure is data, never an exception
- *   - every call is timed and recorded, for the provenance panel
- *   - never log or echo the API key
+ * The key is the caller's, passed in per request. There is no environment fallback
+ * and no default: a client with no key throws on its first call, which is the whole
+ * point of a deployment that holds no secrets of its own.
  */
-
-import { readFileSync } from 'node:fs';
 
 const FETCH_URL = process.env.TINYFISH_FETCH_URL || 'https://api.fetch.tinyfish.ai';
 const SEARCH_URL = process.env.TINYFISH_SEARCH_URL || 'https://api.search.tinyfish.ai/';
 
 /** TinyFish batches at most 10 URLs per Fetch call. */
-export const MAX_URLS_PER_CALL = 10;
+const MAX_URLS_PER_CALL = 10;
 
 /**
  * TinyFish has a 120s CDN ceiling on a batch and 110s per URL. Their docs tell
@@ -34,45 +27,6 @@ export const MAX_URLS_PER_CALL = 10;
 const CLIENT_TIMEOUT_MS = 150_000;
 
 const RETRYABLE_HTTP = new Set([429, 500, 502, 503, 504]);
-
-/**
- * Explain where the API key actually came from.
- *
- * This exists because of a specific, easy-to-hit trap: Node's `--env-file` does
- * *not* override variables already present in the environment. A key exported in
- * an old shell session therefore silently wins over the one written in `.env`,
- * and when that stale key has expired every site fails with INVALID_API_KEY.
- *
- * @param {string} [envPath]
- * @returns {{ source: 'environment'|'env-file'|'unset', mismatch: boolean, message?: string }}
- */
-export function describeApiKeySource(envPath = '.env') {
-  const fromEnv = process.env.TINYFISH_API_KEY || '';
-  if (!fromEnv) return { source: 'unset', mismatch: false };
-
-  let fileKey = '';
-  try {
-    const line = readFileSync(envPath, 'utf8').match(/^\s*TINYFISH_API_KEY\s*=\s*(.*)$/m)?.[1] || '';
-    // `.env` values are commonly quoted, and a CRLF file leaves a trailing \r.
-    // Comparing raw text against the unquoted process value would report a
-    // mismatch for a key that is actually identical.
-    fileKey = line.trim().replace(/^(['"])(.*)\1$/, '$2').trim();
-  } catch {
-    return { source: 'environment', mismatch: false };
-  }
-
-  if (fileKey && fileKey !== fromEnv) {
-    return {
-      source: 'environment',
-      mismatch: true,
-      message:
-        `TINYFISH_API_KEY is set in your shell environment and overrides the value in ${envPath}.` +
-        ' Node --env-file does not override existing variables, so the key actually in use is NOT the one in the file.' +
-        ' Run `unset TINYFISH_API_KEY` (or fix the exported value) if the key in .env is the current one.',
-    };
-  }
-  return { source: fileKey ? 'env-file' : 'environment', mismatch: false };
-}
 
 export class TinyFishError extends Error {
   constructor(message, { code = 'TINYFISH_ERROR', status, requestId, detail } = {}) {
@@ -89,17 +43,12 @@ export class TinyFishClient {
   /**
    * @param {{ apiKey?: string, fetchImpl?: typeof fetch, onCall?: (r: object) => void }} opts
    */
-  constructor({ apiKey = process.env.TINYFISH_API_KEY, fetchImpl, onCall } = {}) {
+  constructor({ apiKey = '', fetchImpl, onCall } = {}) {
     this.apiKey = apiKey || '';
     this.fetchImpl = fetchImpl || globalThis.fetch;
     this.onCall = onCall || null;
-    /** Rolling provenance log, oldest first. */
     this.calls = [];
     this.callSeq = 0;
-  }
-
-  get hasKey() {
-    return Boolean(this.apiKey);
   }
 
   #record(entry) {
@@ -118,7 +67,7 @@ export class TinyFishClient {
   #headers() {
     if (!this.apiKey) {
       throw new TinyFishError(
-        'TINYFISH_API_KEY is not set. Create a key at https://agent.tinyfish.ai/api-keys',
+        'No TinyFish API key. Open Settings in the header and add one, or send X-BrandKit-Tinyfish-Key.',
         { code: 'MISSING_API_KEY' },
       );
     }
@@ -130,8 +79,8 @@ export class TinyFishClient {
   }
 
   /**
-   * One HTTP round trip with retry/backoff. Returns the parsed body; the timing
-   * is appended to the provenance log as a side effect.
+   * One HTTP round trip with retry and backoff. Returns the parsed body; the
+   * timing is appended to the provenance log as a side effect.
    */
   async #request(url, init, { surface, label, meta }) {
     const started = Date.now();
@@ -185,8 +134,7 @@ export class TinyFishClient {
         clearTimeout(timer);
 
         // Caller-side errors (bad input, 401, 422) will never succeed on retry.
-        if (err instanceof TinyFishError && !RETRYABLE_HTTP.has(err.status)) throw err;
-        if (attempt >= 3) {
+        if (err instanceof TinyFishError && !RETRYABLE_HTTP.has(err.status)) throw err;        if (attempt >= 3) {
           this.#record({
             surface,
             label,
@@ -233,14 +181,8 @@ export class TinyFishClient {
   }
 
   /**
-   * Read one or more URLs through TinyFish Fetch.
-   *
-   * Always resolves. Per-URL failures come back in `errors`; only a request-level
-   * failure (bad key, rate limit, 5xx after retries) throws.
-   *
-   * @param {string|string[]} urls
-   * @param {object} [opts]
-   * @returns {Promise<{ results: object[], errors: object[] }>}
+   * Read one or more URLs through TinyFish Fetch. Always resolves: per-URL failures
+   * come back in `errors`, and only a request-level failure throws.
    */
   async fetchContent(urls, opts = {}) {
     const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
@@ -280,13 +222,8 @@ export class TinyFishClient {
         },
       );
 
-    // Batches run two at a time with a short gap between rounds.
-    //
-    // A framework site can declare 49 stylesheets, which is five batches. Firing
-    // all five at once pushed 49 URLs through the API in one burst and tripped
-    // the per-key rate limit. Retries recovered most of them, but a third of the
-    // sheets still came back missing — and with them the @font-face rules, so
-    // the brand's entire type system vanished from the guide.
+    // Batches run two at a time with a short gap: 49 stylesheets is five batches, and
+    // firing them all at once trips the per-key rate limit.
     const concurrency = Math.max(1, opts.concurrency ?? 2);
     const staggerMs = opts.staggerMs ?? 120;
     const responses = [];
@@ -306,8 +243,7 @@ export class TinyFishClient {
   }
 
   /** Provenance log, oldest first. Safe to return to clients. */
-  getCallLog() {
-    return this.calls;
+  getCallLog() {    return this.calls;
   }
 }
 

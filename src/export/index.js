@@ -1,9 +1,9 @@
 /**
  * Output formats.
  *
- * The point of a structured brand guide is that something else can consume it,
- * so these renderers are deliberately literal: no clever transformations that
- * would need undoing on the other side.
+ * The point of a structured brand guide is that something else can consume it, so
+ * these renderers are deliberately literal: no clever transformations that would
+ * need undoing on the other side.
  */
 
 import { buildDesignTokens, toCss, toTailwind, toStyleDictionary, toFigmaVariables } from '../lib/tokens.js';
@@ -11,27 +11,17 @@ import { buildDesignTokens, toCss, toTailwind, toStyleDictionary, toFigmaVariabl
 export const FORMATS = ['json', 'markdown', 'css', 'tailwind', 'styledictionary', 'figma', 'svg'];
 
 /**
- * @param {string} format
- * @param {object} guide
  * @returns {{ body: string, contentType: string, filename: string }}
  */
 export function render(format, guide) {
-  // The four endpoints name the same section differently: a brand guide has
-  // `colors`, the identity payload has `colours` (British, to match the rest of
-  // that document). Accept either so `?format=` works on every endpoint.
-  const colors = guide.colors || guide.colours || {};
-  const typography = guide.typography || {};
+  const tokens = buildDesignTokens({
+    colors: guide.colors || {},
+    typography: guide.typography || {},
+  });
   const meta = {
     name: guide.identity?.name || guide.name,
     url: guide.identity?.url || guide.url,
   };
-
-  const tokens = buildDesignTokens({
-    colors,
-    typography,
-    shape: guide.shape || {},
-    spacing: guide.spacing || null,
-  });
 
   switch (format) {
     case 'markdown':
@@ -68,8 +58,7 @@ function slug(guide) {
   const raw = guide.identity?.domain || guide.identity?.name || guide.domain || guide.url || guide.subject || 'brand';
   try {
     // A full URL makes a better filename stem than a long path.
-    const host = new URL(String(raw).includes('//') ? String(raw) : `https://${raw}`).hostname;
-    return host.replace(/^www\./, '').replace(/[^a-z0-9.]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+    const host = new URL(String(raw).includes('//') ? String(raw) : `https://${raw}`).hostname;    return host.replace(/^www\./, '').replace(/[^a-z0-9.]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
   } catch {
     return String(raw).replace(/[^a-z0-9.]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'brand';
   }
@@ -216,7 +205,6 @@ export function toMarkdown(guide) {
 
   return out.join('\n');
 }
-
 
 /** A single-file swatch sheet, downloadable straight into a deck. */
 export function toSwatchSvg(guide) {

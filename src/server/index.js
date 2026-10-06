@@ -1,14 +1,15 @@
 /**
  * BrandKit server.
  *
- * Four endpoints, each doing genuinely different work on the live site:
- *
  *   POST /api/v1/brand-guide  the complete kit
- *   POST /api/v1/identity     deep CSS forensics and design tokens
- *   POST /api/v1/voice        deep copy analysis and voice guidance
  *   POST /api/v1/compare      multi-brand benchmark
  *
- * Plus GET / for the UI, GET /api/v1/schema, and GET /api/v1/health.
+ * plus GET /api/v1/stream (SSE), GET /api/v1/health, GET /api/v1 and GET / for
+ * the UI.
+ *
+ * The server holds no credentials. Every request carries the caller's own keys in
+ * X-BrandKit-* headers; see src/server/creds.js. Nothing here reads a key from the
+ * environment, so a deployment is a public URL and nothing else.
  *
  * Run with: node src/server/index.js
  */
@@ -18,33 +19,24 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { TinyFishClient, TinyFishError, describeApiKeySource } from '../tinyfish/client.js';
+import { TinyFishClient, TinyFishError } from '../tinyfish/client.js';
 import { buildBrandGuide } from '../pipeline/brand-guide.js';
-import { buildIdentity } from '../pipeline/identity-deep.js';
-import { buildVoiceReport } from '../pipeline/voice-deep.js';
 import { compareBrands } from '../pipeline/compare.js';
 import { render, FORMATS } from '../export/index.js';
-import {
-  BRAND_GUIDE_SCHEMA, IDENTITY_SCHEMA, VOICE_SCHEMA, COMPARE_SCHEMA, validate,
-} from '../schema.js';
 import { DEPTHS } from '../pipeline/collect.js';
 import { clampPages } from '../lib/page-budget.js';
-import { llmInfo } from '../pipeline/llm.js';
 import { streamGuide } from './stream.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(HERE, '..', '..', 'public');
 const PORT = Number(process.env.PORT || 3000);
 
-/**
- * One client per request so each response carries its own provenance log.
- * The API key is read from the environment and never leaves it.
- */
-function newClient() {
-  return new TinyFishClient({ apiKey: process.env.TINYFISH_API_KEY });
+/** One client per request, so each response carries its own provenance log. */
+function newClient(creds) {
+  return new TinyFishClient({ apiKey: creds.tinyfishKey });
 }
 
-/** Shared request parsing so all four endpoints behave identically. */
+/** Shared request parsing so both endpoints behave identically. */
 function readRequest(body, query, { requireInput = true } = {}) {
   const input = body?.input ?? body?.url ?? body?.brand ?? query?.input ?? query?.url ?? null;
 
@@ -93,15 +85,9 @@ function respond(res, payload, format) {
 }
 
 /**
- * Serve one source file to the browser as an ES module.
- *
- * The export renderers are pure: they import only from src/lib, which imports
- * nothing at all. That makes them safe to run in a browser, and it means the
- * UI can produce a JSON, CSS or SVG export from the guide it already holds
- * instead of asking the API to re-crawl the site to produce the same bytes.
- *
- * The path list is fixed, never taken from the request, so this is a set of
- * three named routes rather than a static mount.
+ * Serve one source file to the browser as an ES module. The export renderers are
+ * pure, so the UI can export from the guide it already holds instead of asking the
+ * API to re-crawl for the same bytes. The path list is fixed, never from the request.
  */
 const MODULES = new Map([
   ['/export/index.js', join(HERE, '..', 'export', 'index.js')],
@@ -141,64 +127,45 @@ const routes = [
     },
   },
   {
-    // Streaming form of the flagship endpoint, used by the UI so each TinyFish
-    // call can be shown as it happens rather than after the fact.
     method: 'GET',
     pattern: /^\/api\/v1\/stream$/,
-    handler: ({ req, res, url }) => streamGuide(req, res, url),
+    handler: ({ res, url, creds }) => streamGuide(creds, res, url),
   },
   {
     method: 'POST',
     pattern: /^\/api\/v1\/brand-guide$/,
-    handler: async ({ body, query, res }) => {
+    handler: async ({ body, query, res, creds }) => {
       const req = readRequest(body, query);
-      const guide = await buildBrandGuide(newClient(), req.input, {
+      const guide = await buildBrandGuide(newClient(creds), req.input, {
         depth: req.depth,
         pages: req.pages,
         narrate: req.narrate,
+        creds: creds.llm,
       });
       return respond(res, guide, req.format);
     },
   },
   {
-    // The same endpoint over GET, so a guide can be linked to or bookmarked
-    // with a format attached. The UI does not use it: it already holds the
-    // guide, so exporting in the browser costs no crawl. This exists for
-    // curl, a docs link, and anything else that would rather not send a body.
+    // The same endpoint over GET, so a guide can be linked to with a format
+    // attached. The UI does not use it: it already holds the guide, so exporting
+    // in the browser costs no crawl. This is for curl and docs links.
     method: 'GET',
     pattern: /^\/api\/v1\/brand-guide$/,
-    handler: async ({ query, res }) => {
+    handler: async ({ query, res, creds }) => {
       const req = readRequest(null, query);
-      const guide = await buildBrandGuide(newClient(), req.input, {
+      const guide = await buildBrandGuide(newClient(creds), req.input, {
         depth: req.depth,
         pages: req.pages,
         narrate: req.narrate,
+        creds: creds.llm,
       });
       return respond(res, guide, req.format);
-    },
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/v1\/identity$/,
-    handler: async ({ body, query, res }) => {
-      const req = readRequest(body, query);
-      const identity = await buildIdentity(newClient(), req.input, { depth: req.depth });
-      return respond(res, identity, req.format);
-    },
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/v1\/voice$/,
-    handler: async ({ body, query, res }) => {
-      const req = readRequest(body, query);
-      const report = await buildVoiceReport(newClient(), req.input, { depth: req.depth, narrate: req.narrate });
-      return respond(res, report, req.format);
     },
   },
   {
     method: 'POST',
     pattern: /^\/api\/v1\/compare$/,
-    handler: async ({ body, query, res }) => {
+    handler: async ({ body, query, res, creds }) => {
       const req = readRequest(body, query);
       const competitors = (body?.competitors ?? body?.against ?? [])
         .flatMap((c) => (Array.isArray(c) ? c : [c]))
@@ -210,54 +177,41 @@ const routes = [
         throw err;
       }
 
-      const report = await compareBrands(newClient(), req.input, competitors, { depth: req.depth });
+      const report = await compareBrands(newClient(creds), req.input, competitors, {
+        depth: req.depth,
+        creds: creds.llm,
+      });
       return respond(res, report, req.format);
     },
   },
 
   {
-    method: 'GET',
-    pattern: /^\/api\/v1\/schema$/,
-    handler: () => ({
-      schemas: {
-        'brand-guide': BRAND_GUIDE_SCHEMA,
-        identity: IDENTITY_SCHEMA,
-        voice: VOICE_SCHEMA,
-        compare: COMPARE_SCHEMA,
-      },
-      formats: FORMATS,
-      note: 'The guide object is stable and machine-readable. Every value carries a source; see the provenance block.',
-    }),
-  },
-
-  {
+    /**
+     * Liveness only, and deliberately free of any upstream call.
+     *
+     * It used to fire a TinyFish Search to prove the key worked, which made it a
+     * credential test wearing a health check's name: a platform probing it every
+     * thirty seconds would spend real quota, and a slow upstream would report a
+     * healthy process as unhealthy. Nothing here touches the network, so it says
+     * only what this process can answer: that it is up, and how long it has been.
+     * Whether a caller's key works is a per-request answer, returned by the run
+     * that used it.
+     */
     method: 'GET',
     pattern: /^\/api\/v1\/health$/,
-    handler: async () => {
-      const hasKey = Boolean(process.env.TINYFISH_API_KEY);
-      const client = newClient();
-
-      // A single cheap Search call proves the key and the upstream both work.
-      let upstream = { reachable: false, detail: 'TINYFISH_API_KEY is not set' };
-      if (hasKey) {
-        const started = Date.now();
-        try {
-          await client.search('brandkit health check', { purpose: 'Verify the TinyFish API key works before a long crawl.' });
-          upstream = { reachable: true, latencyMs: Date.now() - started };
-        } catch (err) {
-          upstream = { reachable: false, detail: err.message, code: err.code || 'UNKNOWN' };
-        }
-      }
-
-      return {
-        status: upstream.reachable ? 'ok' : 'degraded',
-        version: '1.0.0',
-        tinyfish: { ...upstream, surfaces: ['search', 'fetch'] },
-        llm: llmInfo(),
-        endpoints: ['/api/v1/brand-guide', '/api/v1/identity', '/api/v1/voice', '/api/v1/compare'],
-        note: 'Search and Fetch are free. The LLM layer is optional and narrates only.',
-      };
-    },
+    handler: async () => ({
+      status: 'ok',
+      version: '1.0.0',
+      uptimeSeconds: Math.round(process.uptime()),
+      auth: 'byok',
+      credentials: {
+        transport: 'headers',
+        tinyfish: 'x-brandkit-tinyfish-key',
+        llm: ['x-brandkit-llm-provider', 'x-brandkit-llm-key', 'x-brandkit-llm-base', 'x-brandkit-llm-model'],
+      },
+      endpoints: ['/api/v1/brand-guide', '/api/v1/compare', '/api/v1/stream'],
+      note: 'This server holds no keys and makes no upstream call here. Send your own key with a request.',
+    }),
   },
 
   {
@@ -266,14 +220,18 @@ const routes = [
     handler: () => ({
       name: 'BrandKit',
       description: 'Turn a company name or URL into a structured brand guide, extracted live via TinyFish Search and Fetch.',
+      auth: {
+        mode: 'byok',
+        note: 'No key is stored. Send your own per request in headers; see /api/v1/health for the names.',
+        required: ['x-brandkit-tinyfish-key'],
+        optional: ['x-brandkit-llm-provider', 'x-brandkit-llm-key', 'x-brandkit-llm-base', 'x-brandkit-llm-model'],
+      },
       endpoints: {
         'POST /api/v1/brand-guide': 'Complete brand guide: logo, palette, typography, voice, messaging.',
-        'POST /api/v1/identity': 'Design tokens, contrast matrix and token graph from the live CSS. Importable into Figma or Tailwind.',
-        'POST /api/v1/voice': 'Sentence-level voice analysis, do/don\'t guidance with real quotes, message pillars.',
         'POST /api/v1/compare': 'Benchmark two to five live brands on colour, type, voice and vocabulary.',
       },
       formats: FORMATS,
-      schema: '/api/v1/schema',
+      schema: 'The guide is validated against BRAND_GUIDE_SCHEMA on every demo run.',
       health: '/api/v1/health',
     }),
   },
@@ -289,35 +247,16 @@ const app = createApp(routes, {
 });
 
 app.listen(PORT, () => {
-  const key = process.env.TINYFISH_API_KEY;
-  const keySource = describeApiKeySource();
   console.log('');
   console.log('  BrandKit — live brand extraction via TinyFish');
   console.log(`  http://localhost:${PORT}`);
   console.log('');
-  console.log(`  TinyFish API key   ${key ? 'configured' : 'MISSING — set TINYFISH_API_KEY'}`);
-  if (keySource.mismatch) {
-    console.log('');
-    console.log(`  ⚠  ${keySource.message}`);
-  }
-  const llm = llmInfo();
-  if (llm.enabled) {
-    console.log(`  LLM narration     enabled · ${llm.provider} · ${llm.model}`);
-  } else {
-    console.log('  LLM narration     off — deterministic mode');
-  }
-  if (llm.problem) {
-    console.log('');
-    console.log(`  ⚠  ${llm.problem}`);
-  }
+  console.log('  TinyFish API key   supplied per request — this server stores none');
+  console.log('  LLM narration      supplied per request — optional, narrates only');
   console.log('');
   console.log('  POST /api/v1/brand-guide   full brand guide');
-  console.log('  POST /api/v1/identity      design tokens + contrast');
-  console.log('  POST /api/v1/voice         voice and messaging lab');
   console.log('  POST /api/v1/compare       brand benchmark');
-  console.log('  GET  /api/v1/schema        JSON Schema');
-  console.log('  GET  /api/v1/health        status');
+  console.log('  GET  /api/v1/stream        live progress (SSE)');
+  console.log('  GET  /api/v1/health        liveness');
   console.log('');
 });
-
-export { app, routes };

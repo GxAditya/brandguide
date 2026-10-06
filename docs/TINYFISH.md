@@ -134,24 +134,27 @@ TinyFish is a retrieval layer, not a generation layer. If you configure a model,
 BrandKit adds a `narrative` block: a tone paragraph, message pillars, and writing
 guidance.
 
-Two providers are supported, and both are set from `.env` alone:
+Two providers are supported. Both come from the caller's own request — a header,
+per request — never from the server's environment, so one deployment serves many
+people with different keys.
 
-- **Gemini** — set `GEMINI_API_KEY` (a key is enough; `GOOGLE_API_KEY` also
-  works) and optionally `GEMINI_MODEL`. Google does not serve
+- **Gemini** — send `X-BrandKit-Llm-Key`, and optionally
+  `X-BrandKit-Llm-Model`. A key with no provider selected means Gemini, which is
+  why the shortest setup is one field. Google does not serve
   `/chat/completions` on its own domain, so this uses the Interactions API:
   `POST https://generativelanguage.googleapis.com/v1beta/interactions` with an
   `x-goog-api-key` header, `input`/`system_instruction` in the body, and the
-  narrative requested as JSON by schema. `GEMINI_THINKING_LEVEL` is sent
-  explicitly because Gemini 3 reasons by default and those tokens are drawn from
-  the same output budget as the reply.
-- **Any OpenAI-compatible endpoint** — set `LLM_API_KEY`, `LLM_BASE_URL` and
-  `LLM_MODEL` together (OpenAI, Groq, OpenRouter, Together, DeepSeek, Mistral,
-  xAI, Cerebras, or a local Ollama).
+  narrative requested as JSON by schema. A thinking level is sent explicitly
+  because Gemini 3 reasons by default and those tokens are drawn from the same
+  output budget as the reply.
+- **Any OpenAI-compatible endpoint** — send `X-BrandKit-Llm-Provider: openai`
+  together with the key, base URL and model (OpenAI, Groq, OpenRouter, Together,
+  DeepSeek, Mistral, xAI, Cerebras, or a local Ollama).
 
-`LLM_PROVIDER=gemini|openai` picks explicitly. Left unset, a complete `LLM_*`
-trio wins over a bare `GEMINI_API_KEY`, because three agreeing variables are a
-clearer signal than one key. An unrecognised value is an error naming the two
-valid ones rather than a silent fallback.
+The provider header picks explicitly. Left unset, a complete OpenAI-compatible
+set wins over a bare key, because three agreeing fields are a clearer signal than
+one. An unrecognised value is an error naming the valid ones rather than a silent
+fallback.
 
 On both paths the request starts at its fullest and sheds optional fields if the
 provider rejects them — `response_format` and the token cap for OpenAI, the
@@ -177,9 +180,12 @@ in the source copy.
 ## Reproducing it
 
 ```bash
-export TINYFISH_API_KEY=sk-tinyfish-...
-node scripts/demo.mjs
+TINYFISH_API_KEY=sk-tinyfish-... node scripts/demo.mjs
 ```
+
+The demo script is the one place a key still comes from the environment: it has no
+settings panel to read from, and passing one on the command line would put it in
+the shell history of every demo run.
 
 The script prints every TinyFish call with its latency as it happens, then
 validates each guide against the published JSON Schema. Output lands in

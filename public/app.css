@@ -67,6 +67,8 @@
   /* ── Z-index scale. Referenced by name, never by an arbitrary number. ── */
   --z-base: 0;
   --z-bar: 20;
+  /* Above the bar and the run panel: the settings dialog owns the screen. */
+  --z-sheet: 60;
   --z-skip: 80;
 
   color-scheme: dark;
@@ -265,6 +267,133 @@ a { color: inherit; }
 
 .social-link svg { width: 17px; height: 17px; display: block; }
 .social-link:hover { color: var(--paper); background: var(--ink-150); }
+
+/* ── Navbar actions ─────────────────────────────────────────────────────── */
+
+.appbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/*
+ * The saved state is drawn on the control rather than left to memory, because
+ * "is my key in?" is the one thing someone opening Settings needs answered
+ * before they start typing. The accent plus a filled dot, so it is not colour
+ * alone.
+ */
+#settings-btn[data-has-key="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--ink-300));
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+#settings-btn[data-has-key="true"] svg { fill: var(--accent); }
+
+#settings-btn[data-has-key="false"] svg { opacity: 0.85; }
+
+.btn-danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 34%, var(--ink-300)); }
+.btn-danger:hover { color: var(--paper); background: color-mix(in srgb, var(--bad) 16%, var(--ink-100)); }
+
+/* ── Settings sheet ─────────────────────────────────────────────────────── */
+
+/*
+ * A dialog, so it is a scrim over a fixed card rather than a panel in the flow.
+ * The card scrolls its body and pins its footer, so Save is reachable however long
+ * the fields get on a short screen.
+ */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-sheet);
+  background: color-mix(in srgb, var(--ink-950) 76%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fade-in 0.2s var(--ease) both;
+}
+
+.sheet {
+  position: fixed;
+  z-index: var(--z-sheet);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(86dvh, 760px);
+  display: flex;
+  flex-direction: column;
+  background: var(--ink-050);
+  border: 1px solid var(--ink-250);
+  border-radius: var(--r-modal);
+  box-shadow: var(--shadow-lift);
+  animation: sheet-in 0.28s var(--ease) both;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid var(--ink-200);
+}
+
+.sheet-title { margin: 0; font-size: 15px; font-weight: 640; letter-spacing: -0.01em; }
+
+.sheet-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  background: transparent;
+  color: var(--dim);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: color 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.sheet-close svg { width: 14px; height: 14px; }
+.sheet-close:hover { color: var(--paper); background: var(--ink-150); }
+
+.sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sheet-divider { height: 1px; background: var(--ink-200); border: 0; margin: 2px 0; }
+
+.sheet-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--dimmer);
+}
+
+.sheet-note[data-warn="true"] { color: var(--warn); }
+
+.sheet-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--ink-200);
+}
+
+.sheet-actions { display: flex; align-items: center; gap: 8px; }
+
+@keyframes sheet-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)) scale(0.985); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
 .social-link:active { transform: translateY(1px); }
 
 /* ── Layout ───────────────────────────────────────────────────────────── */
@@ -365,7 +494,11 @@ a { color: inherit; }
   color: var(--bad);
 }
 
+/* `password` and `url` are here because the settings panel asks for both, and a
+   control that renders unstyled is a control that looks broken. */
 input[type="text"],
+input[type="password"],
+input[type="url"],
 select {
   width: 100%;
   min-width: 0;
@@ -379,17 +512,26 @@ select {
   transition: border-color 0.18s var(--ease), background 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
 
-input[type="text"]::placeholder { color: var(--dimmer); opacity: 1; }
+input[type="text"]::placeholder,
+input[type="password"]::placeholder,
+input[type="url"]::placeholder { color: var(--dimmer); opacity: 1; }
 
 input[type="text"]:hover,
+input[type="password"]:hover,
+input[type="url"]:hover,
 select:hover { border-color: var(--ink-250); }
 
 input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="url"]:focus,
 select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
   outline: none;
 }
+
+/* A secret is monospaced so it is obvious when a stray character is pasted in. */
+input[type="password"] { font-family: var(--mono); font-size: 13px; letter-spacing: 0.02em; }
 
 select {
   appearance: none;
@@ -579,24 +721,6 @@ input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-ghost svg { width: 14px; height: 14px; flex: none; }
 
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  flex: none;
-  background: transparent;
-  color: var(--dim);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: color 0.18s var(--ease), background 0.18s var(--ease);
-}
-
-.icon-btn:hover { color: var(--paper); background: var(--ink-150); }
-.icon-btn svg { width: 16px; height: 16px; }
-
 /* ── Example chips ────────────────────────────────────────────────────── */
 
 .examples { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -687,11 +811,6 @@ input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
 .alert-body p { margin: 0; font-size: 14px; line-height: 1.5; }
 .alert-body p + p { margin-top: 5px; font-size: 13px; color: var(--dim); }
 .alert-body code { font-size: 12px; }
-
-.alert-action {
-  flex: none;
-  align-self: center;
-}
 
 .alert[data-kind="error"] { background: #2d1a22; border-color: #5c2f3c; color: var(--paper); }
 .alert[data-kind="error"] .alert-icon { color: var(--bad); }
@@ -1054,27 +1173,6 @@ input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
   color: var(--dimmer);
 }
 
-/* ── Loading skeleton ─────────────────────────────────────────────────── */
-
-.skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.skeleton-bar {
-  height: 14px;
-  border-radius: 6px;
-  background: linear-gradient(
-    90deg,
-    var(--ink-150) 0%,
-    var(--ink-200) 40%,
-    var(--ink-150) 80%
-  );
-  background-size: 240% 100%;
-  animation: shimmer 1.5s var(--ease-in-out) infinite;
-}
-
 /* ── Keyframes ────────────────────────────────────────────────────────── */
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -1092,10 +1190,6 @@ input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
 @keyframes alert-in {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: none; }
-}
-@keyframes shimmer {
-  from { background-position: 120% 0; }
-  to { background-position: -120% 0; }
 }
 
 @keyframes menu-in {
@@ -2097,6 +2191,25 @@ body[data-view="running"] .stage {
   .brand-name { font-size: 15px; }
   .appbar-context { gap: 8px; }
 
+  /* The label is what makes this a sentence rather than an icon; the icon still
+     carries the saved state, so dropping the text costs nothing but the hint. */
+  #settings-btn span { display: none; }
+  #settings-btn { padding: 6px 9px; }
+
+  /* A scrolled sheet pinned to the bottom edge reads as a sheet, and on a phone
+     the bottom is where the keyboard leaves the least room to lose. */
+  .sheet {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    transform: none;
+    width: 100%;
+    max-height: 88dvh;
+    border-radius: var(--r-modal) var(--r-modal) 0 0;
+    border-bottom: 0;
+    animation-name: rise-in;
+  }
+
   .rail { padding: 20px 16px 24px; }
   .stage { padding: 16px 14px 44px; }
   .foot-line { padding: 13px 16px; }
@@ -2209,6 +2322,8 @@ body[data-view="running"] .stage {
   .skeleton-bar,
   .pill-menu,
   .run-status,
+  .sheet,
+  .sheet-backdrop,
   .toast,
   .outbox-menu {
     animation: none !important;

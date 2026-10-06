@@ -33,20 +33,115 @@
     </div>
 
     <!--
-      Where the code and the author are. Inside the floating tab rather than
-      parked beside it, so the bar reads as one object instead of a logo with two
-      orphans hanging off the edge.
+      Credentials live here rather than in a deployment's environment, so this
+      control is the difference between a working extraction and a refusal. It
+      sits with the other chrome, and carries a filled state once a key is saved,
+      because "did I set this up" is the question the button should answer at a
+      glance.
     -->
-    <nav class="appbar-social" aria-label="BrandKit elsewhere">
+    <div class="appbar-actions">
+      <button type="button" class="btn-ghost" id="settings-btn" aria-haspopup="dialog" aria-expanded="false" data-has-key="false">
+        <svg aria-hidden="true" focusable="false"><use href="#i-key"/></svg>
+        <span>Settings</span>
+      </button>
+
+      <!--
+        Where the code and the author are. Inside the floating tab rather than
+        parked beside it, so the bar reads as one object instead of a logo with two
+        orphans hanging off the edge.
+      -->
+      <nav class="appbar-social" aria-label="BrandKit elsewhere">
       <a class="social-link" href="https://github.com/GxAditya/Brandkit" target="_blank" rel="noopener noreferrer" aria-label="BrandKit on GitHub" title="GitHub">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-github"/></svg>
       </a>
       <a class="social-link" href="https://x.com/kaditya264" target="_blank" rel="noopener noreferrer" aria-label="kaditya264 on X" title="X">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-x"/></svg>
-      </a>
-    </nav>
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-x"/></svg>
+        </a>
+      </nav>
+    </div>
   </div>
 </header>
+
+<!-- ── Settings ──────────────────────────────────────────────────────────────
+     A dialog rather than a page, because it interrupts one decision and then gets
+     out of the way. The secret is never sent anywhere but the run it authorises.
+     -->
+<div class="sheet-backdrop" id="settings-backdrop" hidden></div>
+
+<section class="sheet" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <header class="sheet-head">
+    <h2 class="sheet-title" id="settings-title">Settings</h2>
+    <button type="button" class="sheet-close" id="settings-close" aria-label="Close settings">
+      <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><use href="#i-close"/></svg>
+    </button>
+  </header>
+
+  <form class="sheet-body" id="settings-form" autocomplete="off" novalidate>
+    <div class="field">
+      <label class="field-label" for="tinyfish-key">TinyFish API key</label>
+      <input id="tinyfish-key" name="tinyfishKey" type="password" placeholder="sk-tinyfish-..."
+        spellcheck="false" autocapitalize="off" autocorrect="off" data-1p-ignore>
+      <p class="field-help">
+        Required. Free and unmetered at
+        <a href="https://agent.tinyfish.ai/api-keys" target="_blank" rel="noopener noreferrer">agent.tinyfish.ai</a>.
+        Search and Fetch read the live web; this key is what pays for that.
+      </p>
+    </div>
+
+    <div class="sheet-divider" role="presentation"></div>
+
+    <!--
+      Narration is optional and off by default. Everything measured — colour,
+      type, contrast, voice — is computed from the fetched bytes and needs no key
+      at all, so this section adds writing rather than capability.
+    -->
+    <div class="field">
+      <label class="field-label" for="llm-provider">Narration model</label>
+      <select id="llm-provider" name="llmProvider" class="field-input"></select>
+      <p class="field-help">
+        Optional. A model writes the tone paragraph and message pillars from the
+        measured facts. It cannot change a colour, a typeface or a logo. Leave this
+        off and you get the seven measured pages, which is the recommended mode.
+      </p>
+    </div>
+
+    <div class="field" id="llm-key-field" hidden>
+      <label class="field-label" for="llm-key">Narration key</label>
+      <input id="llm-key" name="llmKey" type="password" spellcheck="false"
+        autocapitalize="off" autocorrect="off" data-1p-ignore>
+      <p class="field-help" id="llm-key-help">A key for the provider above.</p>
+    </div>
+
+    <div class="field" id="llm-base-field" hidden>
+      <label class="field-label" for="llm-base">Server base URL</label>
+      <input id="llm-base" name="llmBase" type="url" placeholder="https://api.openai.com/v1"
+        spellcheck="false" autocapitalize="off" autocorrect="off">
+      <p class="field-help">The root that <code>/chat/completions</code> is appended to.</p>
+    </div>
+
+    <div class="field" id="llm-model-field" hidden>
+      <label class="field-label" for="llm-model">Model</label>
+      <input id="llm-model" name="llmModel" type="text" placeholder="gemini-3.8-flash"
+        spellcheck="false" autocapitalize="off" autocorrect="off">
+      <p class="field-help">Optional. Left blank, the current Gemini flagship is used.</p>
+    </div>
+
+    <p class="field-error" id="settings-error" role="alert" hidden></p>
+
+    <p class="sheet-note" id="settings-storage">
+      Keys are kept in this browser and sent with each request. The server holds
+      none of them.
+    </p>
+  </form>
+
+  <footer class="sheet-foot">
+    <button type="button" class="btn-ghost btn-danger" id="settings-clear">Forget keys</button>
+    <div class="sheet-actions">
+      <button type="button" class="btn-ghost" id="settings-cancel">Cancel</button>
+      <button type="button" class="btn-primary" id="settings-save">Save</button>
+    </div>
+  </footer>
+</section>
 
 <!-- ── Hero ──────────────────────────────────────────────────────────────── -->
 <section class="hero" aria-labelledby="hero-title">
@@ -170,9 +265,8 @@
         <input id="pages" name="pages" type="range" min="6" max="24" step="1" value="14"
                disabled aria-describedby="pages-help">
         <p class="field-help" id="pages-help">
-          Seven pages are produced from measurement alone. Set GEMINI_API_KEY, or
-          LLM_API_KEY with LLM_BASE_URL and LLM_MODEL, to generate the full
-          document, where this becomes the page count.
+          Seven pages are produced from measurement alone. Add a narration key in
+          Settings to generate the full document, where this becomes the page count.
         </p>
       </div>
 
@@ -254,6 +348,11 @@
   <symbol id="i-prev" viewBox="0 0 16 16"><path d="M10 3.5L5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-next" viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-caret" viewBox="0 0 16 16"><path d="M4 6.5 8 10.5l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <!--
+    A key rather than a gear: the thing being set is a credential, and a gear
+    would promise preferences this dialog does not have.
+  -->
+  <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5.5" cy="10.5" r="2.75" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7.6 8.4 13 3M10.4 5.6l1.6 1.6M12.2 3.8l1.7 1.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <!--
     Brand marks, solid rather than stroked, so they carry their own silhouette
     instead of borrowing the line weight of the interface icons beside them.

@@ -1,10 +1,9 @@
 /**
- * Endpoint 1 — the full brand guide.
+ * The full brand guide.
  *
- * Composes every extractor into the versioned guide object, then scores how
- * much to trust it. The confidence score is not decoration: it is derived from
- * how many independent sources agreed on each section, so a guide with a
- * missing stylesheet says so.
+ * Composes every extractor into the versioned guide object, then scores how much
+ * to trust it. The confidence score is derived from how many independent sources
+ * agreed on each section, so a guide with a missing stylesheet says so.
  */
 
 import { collect } from './collect.js';
@@ -17,13 +16,9 @@ import { analyseCopy, mergeVoice } from '../extract/voice.js';
 import { narrate, llmInfo } from './llm.js';
 import { DEFAULT_PAGES, clampPages } from '../lib/page-budget.js';
 
-export const SCHEMA_VERSION = '1.0.0';
+const SCHEMA_VERSION = '1.0.0';
 
-/**
- * @param {import('../tinyfish/client.js').TinyFishClient} client
- * @param {string} input URL or company name
- * @param {{ depth?: string, pages?: number, onProgress?: Function, narrate?: boolean }} [opts]
- */
+
 export async function buildBrandGuide(client, input, opts = {}) {
   const crawl = await collect(client, input, opts);
 
@@ -61,7 +56,7 @@ export async function buildBrandGuide(client, input, opts = {}) {
   let narrativeMeta = { used: false, reason: 'not requested' };
 
   if (opts.narrate !== false) {
-    const result = await narrate(facts, { pages: opts.pages });
+    const result = await narrate(facts, { pages: opts.pages, creds: opts.creds });
     narrative = result.narrative;
     narrativeMeta = result.meta;
   }
@@ -87,7 +82,7 @@ export async function buildBrandGuide(client, input, opts = {}) {
     messaging,
     ...(narrative ? { narrative } : {}),
     narrativeMeta,
-    llm: llmInfo(),
+    llm: llmInfo(opts.creds),
     confidence,
     provenance: buildProvenance(client, crawl),
     deck: {
@@ -98,10 +93,7 @@ export async function buildBrandGuide(client, input, opts = {}) {
   };
 }
 
-/**
- * Per-section confidence, from how the section was derived rather than from a
- * fixed number.
- */
+/** Per-section confidence, derived from how the section was built. */
 function scoreConfidence({ crawl, logos, colors, typography, voice, messaging, identity }) {
   const bySection = {};
 
@@ -113,7 +105,6 @@ function scoreConfidence({ crawl, logos, colors, typography, voice, messaging, i
       (identity.description ? 0.15 : 0),
   );
 
-  // Logos: driven by verified assets and the strength of the winner.
   bySection.logos = clamp01(logos.confidence || 0);
 
   // Colour: stylesheets are the real source; head metadata is a fallback.

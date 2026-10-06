@@ -1,54 +1,37 @@
 /**
- * Which model the narration layer talks to, resolved from the environment.
+ * Which model the narration layer talks to, resolved from one caller's credentials.
  *
- * Two providers are supported and they do not speak the same protocol:
+ *   gemini             Google's API: `x-goog-api-key` auth and an `input` /
+ *                      `system_instruction` body. GEMINI_API_KEY, GEMINI_MODEL.
+ *   openai-compatible  Any `/chat/completions` server. LLM_API_KEY, LLM_BASE_URL,
+ *                      LLM_MODEL.
  *
- *   gemini             Google's own API. Auth is an `x-goog-api-key` header rather
- *                      than a bearer token, and the request body uses `input` /
- *                      `system_instruction` rather than Chat Completions messages.
- *                      Configure with GEMINI_API_KEY and GEMINI_MODEL.
+ * `LLM_PROVIDER` overrides inference; without it a complete `LLM_*` trio wins over
+ * a bare `GEMINI_API_KEY`, since three matching variables signal intent better than
+ * one key left behind.
  *
- *   openai-compatible  Any `/chat/completions` server: OpenAI, Groq, OpenRouter,
- *                      Together, Ollama. Configure with LLM_API_KEY, LLM_BASE_URL
- *                      and LLM_MODEL.
+ * The names are still environment-variable names, because that is what the shape
+ * has always been and `src/server/creds.js` maps request headers onto exactly these
+ * fields. What changed is where they come from: the caller's own request, never the
+ * server's process environment. One deployment serves many keys at once, so nothing
+ * here may read `process.env`.
  *
- * Both are configured entirely from `.env`, so changing model or provider never
- * requires a code change. `LLM_PROVIDER` overrides inference; without it a
- * complete `LLM_*` trio wins over a bare `GEMINI_API_KEY`, because three matching
- * variables are a stronger signal of intent than one key someone left behind.
- *
- * Google docs: https://ai.google.dev/gemini-api/docs/text-generation
- *             https://ai.google.dev/gemini-api/docs/models
+ * Docs: https://ai.google.dev/gemini-api/docs/text-generation
  */
 
-/** Canonical provider ids. `gemini` speaks Google's API; the rest share one shape. */
-export const LLM_PROVIDERS = ['gemini', 'openai-compatible'];
-
 /**
- * The Interactions endpoint.
- *
- * `v1beta` is the path Google's own REST samples use. `interactions` is the
- * current surface, replacing the older `models/{id}:generateContent` call.
+ * The Interactions endpoint. `v1beta` is the path Google's own REST samples use,
+ * and `interactions` is the current surface, replacing `models/{id}:generateContent`.
  */
-export const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
 /**
- * Model used when a Gemini key is present but no model was named.
- *
- * Gemini 3.8 Flash is the current stable flagship and the model Google's own
- * "for new projects, use this" guidance points at, so defaulting here means a
- * user who only pasted a key gets a working layer.
+ * Model used when a Gemini key is present but no model was named, so a user who
+ * only pasted a key gets a working layer.
  */
 export const GEMINI_DEFAULT_MODEL = 'gemini-3.8-flash';
 
-/**
- * Current Gemini text models, newest first.
- *
- * Kept in code for two reasons: a 404 from a mistyped id is a common enough
- * mistake to be worth naming, and model ids churn faster than the docs this
- * project ships with. Only text models are listed — the image, video, TTS and
- * embedding families cannot return the narrative object.
- */
+/** Current Gemini text models, newest first. Listed so a 404 can name the valid ids. */
 export const GEMINI_MODELS = {
   'gemini-3.8-flash': 'Current stable flagship. The default here.',
   'gemini-3.5-flash-lite': 'Cheapest and fastest of the 3.x line.',
@@ -80,12 +63,7 @@ const ALIASES = new Map([
   ['custom', 'openai-compatible'],
 ]);
 
-/**
- * Reasoning effort. Gemini 3 thinks by default, which costs latency and output
- * tokens; the model card guidance is to turn it down for extraction and
- * classification, which is exactly what narration is. `low` is therefore the
- * default and `GEMINI_THINKING_LEVEL` raises it when a user wants more.
- */
+/** Gemini 3 thinks by default, which costs latency and tokens; narration wants it low. */
 const THINKING_LEVELS = new Set(['minimal', 'low', 'medium', 'high']);
 const DEFAULT_THINKING_LEVEL = 'low';
 
@@ -124,42 +102,30 @@ function normaliseProvider(raw) {
 }
 
 /**
- * Resolve the provider, and everything needed to call it, from the environment.
+ * Resolve the provider from one caller's credentials. Never throws: a bad value
+ * returns `configured: false` with a `problem` naming the fix, since an optional
+ * feature must never be why a guide fails to generate.
  *
- * Never throws. A bad value comes back as `configured: false` with a `problem`
- * that names the fix, because a missing optional feature must never be the
- * reason a brand guide fails to generate.
- *
- * @param {NodeJS.ProcessEnv} [env]
- * @returns {{
- *   provider: 'gemini'|'openai-compatible'|null,
- *   configured: boolean,
- *   problem: string|null,
- *   apiKey: string,
- *   baseUrl: string,
- *   model: string,
- *   thinkingLevel?: string,
- *   endpoint?: string,
- * }}
+ * @param {NodeJS.ProcessEnv} [creds]
  */
-export function resolveLlm(env = process.env) {
-  const explicit = clean(env.LLM_PROVIDER);
+export function resolveLlm(creds = {}) {
+  const explicit = clean(creds.LLM_PROVIDER);
   const { provider: requested, problem: badProvider } = normaliseProvider(explicit);
 
   if (badProvider) {
     return { provider: null, configured: false, problem: badProvider, apiKey: '', baseUrl: '', model: '' };
   }
 
-  const openAiComplete = Boolean(clean(env.LLM_API_KEY) && clean(env.LLM_BASE_URL) && clean(env.LLM_MODEL));
+  const openAiComplete = Boolean(clean(creds.LLM_API_KEY) && clean(creds.LLM_BASE_URL) && clean(creds.LLM_MODEL));
   const provider =
-    requested || (openAiComplete ? 'openai-compatible' : geminiKey(env) ? 'gemini' : null);
+    requested || (openAiComplete ? 'openai-compatible' : geminiKey(creds) ? 'gemini' : null);
 
   if (!provider) {
     return { provider: null, configured: false, problem: null, apiKey: '', baseUrl: '', model: '' };
   }
 
   if (provider === 'gemini') {
-    const apiKey = geminiKey(env);
+    const apiKey = geminiKey(creds);
     if (!apiKey) {
       return {
         provider: 'gemini',
@@ -173,10 +139,10 @@ export function resolveLlm(env = process.env) {
       };
     }
 
-    const baseUrl = stripTrailingSlash(env.GEMINI_BASE_URL || GEMINI_BASE_URL);
+    const baseUrl = stripTrailingSlash(creds.GEMINI_BASE_URL || GEMINI_BASE_URL);
     // LLM_MODEL is accepted as a fallback so one variable can switch models
     // regardless of which provider is selected.
-    const model = clean(env.GEMINI_MODEL) || clean(env.LLM_MODEL) || GEMINI_DEFAULT_MODEL;
+    const model = clean(creds.GEMINI_MODEL) || clean(creds.LLM_MODEL) || GEMINI_DEFAULT_MODEL;
 
     return {
       provider: 'gemini',
@@ -185,14 +151,14 @@ export function resolveLlm(env = process.env) {
       apiKey,
       baseUrl,
       model,
-      thinkingLevel: thinkingLevel(env),
+      thinkingLevel: thinkingLevel(creds),
       endpoint: `${baseUrl}/interactions`,
     };
   }
 
-  const apiKey = clean(env.LLM_API_KEY);
-  const baseUrl = stripTrailingSlash(env.LLM_BASE_URL);
-  const model = clean(env.LLM_MODEL);
+  const apiKey = clean(creds.LLM_API_KEY);
+  const baseUrl = stripTrailingSlash(creds.LLM_BASE_URL);
+  const model = clean(creds.LLM_MODEL);
 
   if (!apiKey || !baseUrl || !model) {
     const missing = [

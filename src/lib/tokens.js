@@ -1,43 +1,18 @@
 /**
- * Design-token serialisers.
- *
- * One place that knows how a brand guide becomes CSS, a Tailwind theme, a
- * Style Dictionary set, or a Figma Variables collection. Both the
- * `/api/v1/identity` endpoint and the export renderers use these, so a token
- * exported from the UI is byte-identical to one fetched from the API.
+ * Design-token serialisers: how a brand guide becomes CSS, a Tailwind theme, a
+ * Style Dictionary set or a Figma Variables collection. The renderers run unchanged
+ * in the browser, so a token exported from the UI is byte-identical to one fetched
+ * from the API.
  */
 
 import { parseColor } from './colour.js';
 
-/** Assemble the token tree from extracted colour and typography sections. */
-export function buildDesignTokens({ colors = {}, typography = {}, shape = {}, spacing = null }) {
+/** Assemble the token tree from the extracted colour and typography sections. */
+export function buildDesignTokens({ colors = {}, typography = {} }) {
   return {
     colour: buildColourTokens(colors),
     typography: buildTypographyTokens(typography),
-    radius: buildRadiusTokens(shape),
-    space: spacing || { stepsRem: [], base: 1 },
   };
-}
-
-/**
- * Border radii, as actually used.
- *
- * `inherit` and unresolved `var()` references are skipped: a radius token whose
- * value is the word "inherit" is a resumption of a reset, not a design decision.
- */
-function buildRadiusTokens(shape) {
-  const out = {};
-  for (const step of (shape?.radii || []).slice(0, 6)) {
-    const value = String(step.value || '').trim();
-    if (!value) continue;
-    if (/^(inherit|initial|unset|revert|auto)$/i.test(value)) continue;
-    if (/^var\(/i.test(value)) continue;
-
-    const key = normaliseRadius(value);
-    if (!key) continue;
-    out[key] = { value };
-  }
-  return out;
 }
 
 const ROLE_META = new Set(['declaredThemeColor', 'inferred', 'shared', 'darkSurface']);
@@ -76,16 +51,6 @@ function quoteFont(family) {
   return /\s/.test(family) ? `"${family}"` : family;
 }
 
-function normaliseRadius(value) {
-  const n = parseFloat(value);
-  if (!Number.isFinite(n)) {
-    // `999px` and `50%` normalise to their own name; a `calc()` stays readable.
-    const cleaned = String(value).replace(/[^\w%.-]/g, '').replace(/^[.-]+/, '');
-    return cleaned || null;
-  }
-  return Number.isInteger(n) ? String(n) : String(n).replace('.', '-');
-}
-
 /** `:root` custom properties. */
 export function toCss(tokens, meta = {}) {
   const lines = [
@@ -105,12 +70,6 @@ export function toCss(tokens, meta = {}) {
   }
   for (const [name, token] of Object.entries(tokens.typography || {})) {
     lines.push(`  --${name}: ${token.value};`);
-  }
-  for (const [name, step] of Object.entries(tokens.radius || {})) {
-    lines.push(`  --radius-${name}: ${step.value};`);
-  }
-  for (const step of tokens.space?.stepsRem || []) {
-    lines.push(`  --space-${String(step).replace('.', '-')}: ${step}rem;`);
   }
   lines.push('}', '');
   return lines.join('\n');
@@ -137,11 +96,6 @@ export function toTailwind(tokens) {
     if (name.startsWith('leading-')) lineHeight[name.slice(7)] = token.value;
   }
 
-  const spacing = {};
-  for (const step of tokens.space?.stepsRem || []) {
-    spacing[String(step).replace('.', '-')] = `${step}rem`;
-  }
-
   return {
     theme: {
       extend: {
@@ -149,8 +103,6 @@ export function toTailwind(tokens) {
         fontFamily: Object.keys(fontFamily).length ? fontFamily : undefined,
         fontSize: Object.keys(fontSize).length ? fontSize : undefined,
         lineHeight: Object.keys(lineHeight).length ? lineHeight : undefined,
-        borderRadius: Object.fromEntries(Object.entries(tokens.radius || {}).map(([n, s]) => [n, s.value])),
-        spacing: Object.keys(spacing).length ? spacing : undefined,
       },
     },
   };
@@ -169,12 +121,6 @@ export function toStyleDictionary(tokens) {
   for (const [name, token] of Object.entries(tokens.typography || {})) {
     const group = name.startsWith('font-') ? 'font' : name.startsWith('size-') ? 'size' : name.startsWith('leading-') ? 'leading' : 'tracking';
     properties[`typography.${group}.${name.split('-').pop()}`] = { value: token.value };
-  }
-  for (const [name, step] of Object.entries(tokens.radius || {})) {
-    properties[`radius.${name}`] = { value: step.value };
-  }
-  for (const step of tokens.space?.stepsRem || []) {
-    properties[`space.${String(step).replace('.', '-')}`] = { value: `${step}rem` };
   }
 
   return { properties };

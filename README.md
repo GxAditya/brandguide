@@ -19,7 +19,7 @@ POST /api/v1/brand-guide   { "input": "linear" }
 | | |
 | --- | --- |
 | Runtime dependencies | **zero** |
-| Setup | `export TINYFISH_API_KEY=...` then `npm start` |
+| Setup | `npm start`, then paste your key into **Settings** |
 | Cost | Search and Fetch are free; the LLM layer is optional and off by default |
 | Screenshots | [`docs/screenshots/`](docs/screenshots) |
 
@@ -35,42 +35,55 @@ anything other than the brand is a screenshot, not a guide.
 
 ```bash
 git clone <this repo> && cd brandguide
-cp .env.example .env          # put your key in, then run
 npm start                     # http://localhost:3000
 ```
 
-Or skip the file entirely:
+Then open **Settings** in the header and paste a TinyFish key. There is nothing to
+install and nothing to configure on disk: `node_modules` does not exist because
+`package.json` has no dependencies.
+
+### Bring your own key
+
+**The server holds no credentials.** A deployment is a public URL and nothing else.
+Each caller sends their own key with their own request, so two people using the
+same instance spend their own quota and there is nothing stored to leak or rotate.
+
+| Header | Required? | Purpose |
+| --- | --- | --- |
+| `X-BrandKit-Tinyfish-Key` | **yes** | Search and Fetch. Nothing works without it. |
+| `X-BrandKit-Llm-Key` | no | Narration key. Omitted means measured pages only. |
+| `X-BrandKit-Llm-Provider` | no | `gemini` or `openai`. A bare key means Gemini. |
+| `X-BrandKit-Llm-Base` | no | Base URL for an OpenAI-compatible server. |
+| `X-BrandKit-Llm-Model` | no | Model id. Defaults to the current Gemini flagship. |
 
 ```bash
-export TINYFISH_API_KEY=sk-tinyfish-...
-npm start
+curl -X POST http://localhost:3000/api/v1/brand-guide \
+  -H 'content-type: application/json' \
+  -H 'x-brandkit-tinyfish-key: sk-tinyfish-...' \
+  -d '{"input":"linear"}'
 ```
 
-There is nothing to install. `node_modules` does not exist because
-`package.json` has no dependencies, and `.env` is read by Node itself via
-`--env-file-if-exists`, so there is no dotenv dependency either.
+Headers rather than a request body, because the live progress endpoint is a `GET`
+and an `EventSource` cannot carry one. Not the query string either: a secret in a
+URL lands in proxy logs and browser history.
 
-### The only key you need
-
-| Variable | Required? | Purpose |
-| --- | --- | --- |
-| `TINYFISH_API_KEY` | **yes** | Search and Fetch. Nothing works without it. |
-| `GEMINI_API_KEY` | no | Narration via Google Gemini. A key alone is enough. |
-| `GEMINI_MODEL` | no | Which Gemini model. Defaults to `gemini-3.8-flash`. |
-| `LLM_API_KEY` | no | Narration via any OpenAI-compatible server. |
-| `LLM_BASE_URL` | no | Its `/chat/completions` base. |
-| `LLM_MODEL` | no | Model id. All three `LLM_*` are required together. |
-
-`LLM_MODEL` also names the model on Gemini, so one variable switches models
-either way. `LLM_PROVIDER=gemini|openai` picks explicitly; without it a complete
-`LLM_*` trio wins over a bare `GEMINI_API_KEY`.
-
-**Google Gemini** is the shortest configuration — one variable:
+The CLI takes the same keys as flags, so a shell history never holds one:
 
 ```bash
-# .env
-GEMINI_API_KEY=AIza...
-GEMINI_MODEL=gemini-3.8-flash   # optional; this is the default
+node src/cli.js guide linear --key sk-tinyfish-...
+node src/cli.js guide linear --key sk-... --llm-key AIza...   # narrate with Gemini
+```
+
+`LLM_PROVIDER` is `gemini` or `openai`; without it a complete OpenAI-compatible
+trio wins over a bare Gemini key.
+
+**Google Gemini** is the shortest configuration — one key field, since a key with
+no provider selected means Gemini:
+
+```bash
+# Settings → Narration model → Google Gemini
+key:    AIza...
+model:  gemini-3.8-flash   # optional; this is the default
 ```
 
 Gemini is called on its own API, not the OpenAI shape, because Google does not
@@ -80,15 +93,15 @@ serve `/chat/completions` on its own domain. The request goes to
 than by asking nicely in the prompt.
 
 Gemini 3 reasons before it answers, and those tokens come out of the same output
-budget as the reply, so `GEMINI_THINKING_LEVEL` (`minimal`, `low`, `medium`,
-`high`) is sent explicitly and defaults to `low`. Leave it alone unless you want
-a slower, deeper read. Current model ids are listed in
+budget as the reply, so a thinking level (`minimal`, `low`, `medium`, `high`) is
+sent explicitly and defaults to `low`. Leave it alone unless you want a slower,
+deeper read. Current model ids are listed in
 [Google's model docs](https://ai.google.dev/gemini-api/docs/models); an
 unrecognised id is reported by name rather than as a bare 404.
 
 **You can also drop in any OpenAI-compatible provider:**
 
-| Provider | `LLM_BASE_URL` | Example `LLM_MODEL` |
+| Provider | Server base URL | Example model |
 | --- | --- | --- |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
 | Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
@@ -234,6 +247,7 @@ vocabulary overlap. Returns which parts of the brand are genuinely its own.
 ```bash
 curl -s localhost:3000/api/v1/compare \
   -H 'Content-Type: application/json' \
+  -H 'X-BrandKit-Tinyfish-Key: sk-tinyfish-...' \
   -d '{"input":"linear","competitors":["notion","asana"]}'
 ```
 
@@ -242,6 +256,10 @@ so a guide can be linked to or bookmarked.
 
 Plus `GET /api/v1/schema` (JSON Schema), `GET /api/v1/health`, and
 `GET /api/v1/stream` (SSE, so the UI can show each source as it is read).
+
+`GET /api/v1/health` is liveness only: it makes no upstream call and never touches
+a key, so it is safe to point a platform's health check at. Whether your key works
+is answered by the run that used it.
 
 Every endpoint accepts `?format=`: `json`, `markdown`, `css`, `tailwind`,
 `styledictionary`, `figma`, `svg`.
@@ -334,9 +352,9 @@ BrandKit separates the two jobs:
 - **Deterministic core, always on, no model.** Colours, WCAG contrast,
   CIEDE2000, token graphs and sentence-level linguistic measurement are computed
   locally from fetched bytes. Reproducible, auditable, free.
-- **Optional LLM, narrates only.** Set `GEMINI_API_KEY`, or `LLM_API_KEY` with
-  `LLM_BASE_URL` and `LLM_MODEL` for any OpenAI-compatible endpoint. It upgrades
-  the *narrative* — tone paragraph, message pillars, writing guidance — and is
+- **Optional LLM, narrates only.** Add a key in Settings, or send
+  `X-BrandKit-Llm-Key` for Gemini or any OpenAI-compatible endpoint. It upgrades the
+  *narrative* — tone paragraph, message pillars, writing guidance — and is
   structurally barred from touching colour, type or logo values.
 
 **With no LLM key the app is fully functional.** That is the default, and it is
@@ -391,8 +409,9 @@ site to produce bytes the client already holds.
 
 ## Notes
 
-- `TINYFISH_API_KEY` is read from the environment, never logged, never returned.
-  The server logs the request path and the error code on failure, never the body.
+- The server stores no keys at all. They arrive per request in headers, are used
+  for that request, and are never logged or returned. The server logs the request
+  path and the error code on failure, never the headers and never the body.
 - Generated guides are ephemeral. Nothing is persisted.
 - Re-running refreshes: brand sites change.
 - Screenshots in `docs/screenshots/` were produced by `scripts/screenshot.mjs`

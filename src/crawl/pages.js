@@ -40,8 +40,6 @@ const EXCLUDE = [
  * Score and pick same-site pages worth reading.
  *
  * @param {string[]} links absolute URLs from the homepage
- * @param {string} homepageUrl
- * @param {{ limit?: number }} [opts]
  * @returns {Array<{ url: string, intent: string, score: number, reason: string }>}
  */
 export function selectPages(links, homepageUrl, opts = {}) {
@@ -93,7 +91,7 @@ export function selectPages(links, homepageUrl, opts = {}) {
 
   picked.sort((a, b) => b.score - a.score);
 
-  // Keep the mix varied: at most two pages per intent so we do not fetch five
+  // Keep the mix varied: at most two pages per intent, so we do not fetch five
   // blog indexes and learn nothing about the company.
   const perIntent = new Map();
   const out = [];
@@ -128,8 +126,7 @@ export async function fetchPage(client, url) {
   if (!page) {
     // A per-URL failure (bot wall, 404, timeout) is data, not an exception. Keep
     // both the raw code and a readable message so callers can branch on the code.
-    const raw = errors[0];
-    const code = raw?.error || 'UNKNOWN';
+    const raw = errors[0];    const code = raw?.error || 'UNKNOWN';
     return {
       url: raw?.url || url,
       ok: false,

@@ -1,25 +1,10 @@
 /**
- * BrandKit UI controller.
+ * BrandKit UI controller: mounts the hero, runs a job, and composes the document.
+ * A guide renders as a paged deck in the brand's own identity; a comparison renders
+ * as a signal matrix.
  *
- * What this file is responsible for, and nothing else:
- *
- *   1. Mount the hero: the ASCII cloud field, the search bar, the mode tabs.
- *   2. Run a job. Guide runs stream, so the dialog can show what is being read
- *      while it is being read. Compare runs post, because there is no stream
- *      for it, and the dialog says so rather than pretending to know more than
- *      the server does.
- *   3. Show the read set while it matters. Sources are genuinely interesting
- *      mid-run and dead weight afterwards, so they live in a dialog that
- *      closes itself.
- *   4. Compose the document. The guide is a paged deck set in the brand's own
- *      identity; a comparison is a signal matrix and a distinctiveness read.
- *
- * The hero and the run options are two renderings of one set of values, so they
- * are wired through a small mirror layer rather than being two copies of the
- * state. Either can be removed without the other losing its values.
- *
- * No framework, no build step, and no innerHTML with untrusted content: every
- * string that reaches the page goes through textContent or a parsed node.
+ * No framework, no build step, and no innerHTML with untrusted content: every string
+ * that reaches the page goes through textContent or a parsed node.
  */
 
 import { renderDeck } from '/deck.js';
@@ -27,6 +12,10 @@ import { renderCompare } from '/compare.js';
 import { mountOrb } from '/orb.js';
 import { mountGridReveal } from '/grid-reveal.js';
 import { render as renderExport } from '/export/index.js';
+import {
+  PROVIDERS, authHeaders, clearCreds, hasLlmKey, hasTinyfishKey, isPersistent,
+  loadCreds, saveCreds,
+} from '/creds.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -36,10 +25,8 @@ const state = {
   running: false,
   guide: null,
   pages: 14,
-  llmAvailable: false,
-  events: null,
+  /** Cancels whichever fetch is in flight: the run stream or a comparison. */
   abort: null,
-  startedAt: 0,
 
   /** 'idle' until a run starts, then 'running' for the rest of the session. */
   view: 'idle',
@@ -61,14 +48,7 @@ const HERO_NOTE = {
 
 /* ── The mirrored controls ───────────────────────────────────────────────── */
 
-/**
- * The same value, expressed in more than one place.
- *
- * The hero carries the input and the depth. The rail and the stage composer
- * carry them too, because those surfaces still exist and are still bound. Any
- * change to one writes to all of them, so there is never a second source of
- * truth to reconcile.
- */
+/** The hero and the stage composer share these values, so a change to one writes to all. */
 const FIELDS = {
   input: ['#input', '#input-stage'],
   competitors: ['#competitors', '#competitors-rail'],
@@ -106,11 +86,9 @@ function setButtonLabel(text) {
 /* ── Boot ────────────────────────────────────────────────────────────────── */
 
 /**
- * Wire the controls, if they are on this page.
- *
- * The renderers below are imported directly by the screenshot harness, which
- * has no hero and no form, so bootstrapping has to be a no-op there rather than
- * throwing on a missing element and taking every renderer down with it.
+ * Wire the controls, if they are on this page. The screenshot harness imports the
+ * renderers directly and has no hero, so bootstrapping must be a no-op there rather
+ * than throwing on a missing element.
  */
 function boot() {
   const hero = $('#hero-composer');
@@ -146,16 +124,245 @@ function boot() {
 
   initPageCount();
   initDepthMenu();
+  initSettings();
   syncLengthAvailability();
   setMode(state.mode, { quiet: true });
 }
 
+/* ── Settings ───────────────────────────────────────────────────────────── */
+
 /**
- * Switch the output mode.
+ * The credential sheet.
  *
- * Every control that only means something in one mode is hidden rather than
- * disabled, so nothing on screen ever offers a knob that cannot turn anything.
+ * Keys are read into the fields on open, not on load, so a browser autofill or a
+ * password manager cannot quietly overwrite a saved key before anyone looks at it.
+ * Escape and the backdrop both close without saving, focus returns to the button
+ * that opened it, and Tab is trapped inside while it is open — a dialog that leaks
+ * focus to the page behind it is not really a dialog.
  */
+/**
+ * Open the sheet from anywhere that needs the key, which is why `open` is a
+ * module-level handle rather than a closure: a run with no credentials has to be
+ * able to summon it.
+ */
+let openSettings = () => {};
+
+function initSettings() {
+  const sheet = $('#settings');
+  const backdrop = $('#settings-backdrop');
+  const trigger = $('#settings-btn');
+  const provider = $('#llm-provider');
+  const error = $('#settings-error');
+  if (!sheet || !backdrop || !trigger || !provider) return;
+
+  for (const option of PROVIDERS) {
+    const node = document.createElement('option');
+    node.value = option.value;
+    node.textContent = option.label;
+    provider.append(node);
+  }
+
+  let restoreFocus = null;
+
+  /** The narration fields follow the provider: OpenAI-compatible needs a base and a model. */
+  const paintProvider = () => {
+    const chosen = provider.value;
+    const openAi = chosen === 'openai';
+    const on = Boolean(chosen);
+
+    for (const id of ['#llm-key-field', '#llm-base-field', '#llm-model-field']) {
+      const field = $(id);
+      if (field) field.hidden = !on || (id === '#llm-base-field' && !openAi) || (id === '#llm-model-field' && !openAi);
+    }
+
+    const help = $('#llm-key-help');
+    if (help) {
+      help.textContent = !on
+        ? 'Pick a provider to narrate.'
+        : openAi
+          ? 'The key for that server.'
+          : 'From aistudio.google.com/apikey.';
+    }
+  };
+
+  const showError = (message) => {
+    if (!error) return;
+    error.textContent = message;
+    error.hidden = !message;
+  };
+
+  const open = () => {
+    if (!sheet.hidden) return;
+
+    const creds = loadCreds();
+    $('#tinyfish-key').value = creds.tinyfishKey;
+    $('#llm-key').value = creds.llm.key;
+    $('#llm-base').value = creds.llm.base;
+    $('#llm-model').value = creds.llm.model;
+    provider.value = creds.llm.provider;
+    paintProvider();
+    showError('');
+    paintStorageNote();
+
+    // Fall back to the trigger when nothing meaningful was focused. A synthetic
+    // click, or a pointer press on a non-focusable area, leaves the active element
+    // as <body>, and returning focus there on close would drop the keyboard user
+    // back at the top of the document instead of where they left.
+    const active = document.activeElement;
+    restoreFocus = active instanceof HTMLElement && active !== document.body ? active : trigger;
+
+    backdrop.hidden = false;
+    sheet.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    // The key is the one field a first-time user has to fill in, so it is where
+    // focus goes. A returning user with a key already saved starts at the top too,
+    // which keeps the tab order identical between the two cases.
+    $('#tinyfish-key').focus();
+    $('#tinyfish-key').select();
+  };
+
+  const close = () => {
+    if (sheet.hidden) return;
+    sheet.hidden = true;
+    backdrop.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    showError('');
+    if (restoreFocus instanceof HTMLElement) restoreFocus.focus();
+    restoreFocus = null;
+  };
+
+  /** Save, then reflect the result in the navbar and in the length control. */
+  const save = () => {
+    const tinyfishKey = $('#tinyfish-key').value.trim();
+
+    if (!tinyfishKey) {
+      showError('A TinyFish API key is needed to read any site. Keys are free at agent.tinyfish.ai.');
+      $('#tinyfish-key').focus();
+      return;
+    }
+
+    const chosen = provider.value;
+    const llmKey = $('#llm-key').value.trim();
+    const base = $('#llm-base').value.trim();
+    const model = $('#llm-model').value.trim();
+
+    // An OpenAI-compatible server needs all three of base, model and key, and a
+    // half-filled one fails at request time with a message from the pipeline. It is
+    // better to say so here, while the fields are still on screen.
+    if (chosen === 'openai' && llmKey && !(base && model)) {
+      showError('An OpenAI-compatible server needs a base URL and a model as well as the key.');
+      (base ? $('#llm-model') : $('#llm-base')).focus();
+      return;
+    }
+
+    saveCreds({ tinyfishKey, llm: { provider: llmKey ? chosen : '', key: llmKey, base, model } });
+    paintCredState();
+    syncLengthAvailability();
+    close();
+  };
+
+  const forget = () => {
+    clearCreds();
+    $('#tinyfish-key').value = '';
+    $('#llm-key').value = '';
+    $('#llm-base').value = '';
+    $('#llm-model').value = '';
+    provider.value = '';
+    paintProvider();
+    showError('');
+    paintStorageNote();
+    paintCredState();
+    syncLengthAvailability();
+    close();
+  };
+
+  // Published so a run that finds no key can open this rather than explain itself.
+  openSettings = open;
+
+  trigger.addEventListener('click', () => (sheet.hidden ? open() : close()));
+  $('#settings-close')?.addEventListener('click', close);
+  $('#settings-cancel')?.addEventListener('click', close);
+  $('#settings-save')?.addEventListener('click', save);
+  $('#settings-clear')?.addEventListener('click', forget);
+  backdrop.addEventListener('click', close);
+  provider.addEventListener('change', () => {
+    paintProvider();
+    showError('');
+  });
+
+  // Enter saves from any field, which is what a form does and what the markup
+  // already promised with its own <form> element.
+  $('#settings-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    save();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (sheet.hidden) return;
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+      return;
+    }
+
+    if (event.key === 'Tab') trapTab(event, sheet, { trigger, close });
+  });
+
+  paintCredState();
+}
+
+/**
+ * Keep Tab inside the sheet. Focus that escapes to the page behind a modal is the
+ * one failure that makes a modal unusable with a keyboard, and there is nothing
+ * else in the document to stop it.
+ */
+function trapTab(event, sheet, { trigger, close }) {
+  const focusable = $$(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+    sheet,
+  ).filter((node) => node.offsetParent !== null);
+
+  if (!focusable.length) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  } else if (!sheet.contains(document.activeElement)) {
+    // Focus was somewhere outside the sheet entirely, which happens if the dialog
+    // opened underneath a click that also moved focus.
+    event.preventDefault();
+    (trigger || first).focus();
+  }
+
+  void close;
+}
+
+/** Storage can be refused outright, and a save that silently did not persist is worse than a warning. */
+function paintStorageNote() {
+  const note = $('#settings-storage');
+  if (!note) return;
+  // Read after a save: that is the call that learns whether storage worked.
+  const persistent = isPersistent();
+  note.dataset.warn = String(!persistent);
+  note.textContent = persistent
+    ? 'Keys are kept in this browser and sent with each request. The server holds none of them.'
+    : 'This browser is not storing these keys, so they last only until you close the tab. Private browsing usually refuses storage.';
+}
+
+/** The navbar control states whether a key is saved, so the answer is not from memory. */
+function paintCredState() {
+  const trigger = $('#settings-btn');
+  if (trigger) trigger.dataset.hasKey = String(hasTinyfishKey());
+}
+
+/** Controls that only mean something in one mode are hidden, never merely disabled. */
 function setMode(mode, { quiet = false } = {}) {
   if (!RUN_LABELS[mode]) return;
   state.mode = mode;
@@ -182,7 +389,6 @@ function setMode(mode, { quiet = false } = {}) {
   // While a run is live the button says Cancel, whatever the mode says. Switching
   // tabs must not relabel it into something that looks like it starts a new run.
   setButtonLabel(state.running ? 'Cancel' : RUN_LABELS[mode]);
-
   const input = $('#input');
   if (input) {
     input.placeholder = 'linear';
@@ -194,22 +400,17 @@ function setMode(mode, { quiet = false } = {}) {
 
   clearCompareError();
 
-  // Switching tabs empties the document, because a guide is not a comparison and
-  // leaving the wrong one on screen is worse than an empty box.
-  //
-  // It deliberately does not go through resetToIdle. Once a run has started the
-  // panel stays for the rest of the session, and changing which kind of guide you
-  // are after is not going home. A run in flight owns the output, so it is left
-  // alone rather than having its grid torn out from under it.
+  // Switching tabs empties the document: a guide is not a comparison, and leaving
+  // the wrong one on screen is worse than an empty box. It deliberately does not go
+  // through resetToIdle — once a run has started the panel stays for the rest of the
+  // session, and a run in flight owns the output, so it is left alone rather than
+  // having its grid torn out from under it.
   if (!quiet && !state.running) clearOutput();
 }
 
 /**
- * Empty the output section.
- *
- * Separate from resetToIdle because the two are not the same event. Changing your
- * mind about which kind of guide you want should clear the document and leave the
- * panel standing; going home should clear it and bring the panel down too.
+ * Empty the output but leave the panel standing. Distinct from resetToIdle: changing
+ * which kind of guide you want is not the same as going home.
  */
 function clearOutput() {
   $('#output').replaceChildren();
@@ -223,12 +424,9 @@ function clearOutput() {
 }
 
 /**
- * Clear a finished run and put the hero back to how it started.
- *
- * The view is explicit state rather than a `:has()` guess, so it has to be reset
- * by hand here. Anything still holding a canvas is torn down too: both of them
- * own a rAF loop, and a loop left running on a hidden element is a battery cost
- * with nothing on screen.
+ * Clear a finished run and put the hero back. Both canvas components are torn down
+ * too: each owns a rAF loop, and a loop left running on a hidden element is a battery
+ * cost with nothing on screen.
  */
 function resetToIdle() {
   state.guide = null;
@@ -248,12 +446,9 @@ function resetToIdle() {
 /* ── Guide length ────────────────────────────────────────────────────────── */
 
 /**
- * The length control is a budget for the optional narration layer.
- *
- * With no narration the deck is the seven measured pages and the control says
- * so, rather than offering a length the product cannot honour. Changing it
- * recomposes the deck in place, which costs nothing because every fact is
- * already extracted. No re-crawl.
+ * The length control is a budget for the optional narration layer. With no narration
+ * the deck is the seven measured pages, and the control says so rather than offering
+ * a length the product cannot honour.
  */
 function initPageCount() {
   const slider = $('#pages');
@@ -274,34 +469,26 @@ function initPageCount() {
 }
 
 /**
- * Ask the server whether a narration layer is configured.
- *
- * The health endpoint reports whether all three LLM variables are set, which is
- * the same condition the narration layer itself checks. There is no other way
- * for the browser to know: the key never leaves the server.
+ * The length control only means something when a narration key is saved, and the
+ * browser is now the only place that can be known: the server holds no keys, so
+ * there is nothing to ask it. Reading the local store also means the control is
+ * right on the first paint rather than after a round trip.
  */
-async function syncLengthAvailability() {
+function syncLengthAvailability() {
   const slider = $('#pages');
   const field = $('#pages-field');
   const help = $('#pages-help');
   if (!slider || !field) return;
 
-  let enabled = false;
-  try {
-    const body = await fetch('/api/v1/health').then((r) => r.json());
-    enabled = Boolean(body.llm?.enabled);
-  } catch {
-    enabled = false;
-  }
+  const enabled = hasLlmKey();
 
-  state.llmAvailable = enabled;
   slider.disabled = !enabled;
   field.dataset.disabled = String(!enabled);
 
   if (help) {
     help.textContent = enabled
       ? 'How long the full document should be. The measured pages always appear; the written ones fill to this length.'
-      : 'Seven pages are produced from measurement alone. Set GEMINI_API_KEY, or LLM_API_KEY with LLM_BASE_URL and LLM_MODEL, to generate the full document, where this becomes the page count.';
+      : 'Seven pages are produced from measurement alone. Add a narration key in Settings to generate the full document, where this becomes the page count.';
   }
 }
 
@@ -317,17 +504,10 @@ function rerenderGuide() {
 /* ── The depth menu ──────────────────────────────────────────────────────── */
 
 /**
- * The depth control is a listbox, not a <select>.
- *
- * A native select cannot be styled: the popup is drawn by the OS, so it ignores
- * every token in the stylesheet and arrives in whatever the platform's idea of
- * a dropdown is. The native select is therefore kept as the value holder, hidden
- * and out of the tab order, so the form, the value mirror and the submit all
- * still read a real control. What the user touches is a button and a listbox.
- *
- * Keyboard behaviour follows the listbox pattern: arrows move, Home and End
- * jump, Enter and Space commit, Escape closes and returns focus, and Tab closes
- * without changing anything.
+ * A native select's popup is drawn by the OS and ignores the stylesheet, so the
+ * select is kept only as a hidden value holder and the user touches a button plus a
+ * listbox. Keyboard behaviour follows the listbox pattern: arrows move, Home and
+ * End jump, Enter and Space commit, Escape closes and restores focus.
  */
 function initDepthMenu() {
   const wrap = $('#depth-control');
@@ -341,8 +521,7 @@ function initDepthMenu() {
   let open = false;
 
   /* The label always follows the value, whichever surface changed it. */
-  const paint = () => {
-    const option = select.selectedOptions[0];
+  const paint = () => {    const option = select.selectedOptions[0];
     readout.textContent = option?.textContent ?? '';
     for (const item of items()) {
       item.setAttribute('aria-selected', String(item.dataset.value === select.value));
@@ -370,8 +549,7 @@ function initDepthMenu() {
   const commit = (item) => {
     if (!item) return;
     // write() so the rail's own select follows, then repaint from the value.
-    write('depth', item.dataset.value);
-    paint();
+    write('depth', item.dataset.value);    paint();
     setOpen(false);
     trigger.focus();
   };
@@ -415,8 +593,8 @@ function initDepthMenu() {
 
   menu.addEventListener('keydown', onKeyDown);
 
-  /* A pointer press anywhere else dismisses it, including on the trigger,
-     which handles its own toggle on click. */
+  /* A pointer press anywhere else dismisses it, including on the trigger, which
+     handles its own toggle on click. */
   document.addEventListener('pointerdown', (event) => {
     if (open && !wrap.contains(event.target)) setOpen(false);
   });
@@ -431,13 +609,7 @@ function initDepthMenu() {
 
 /* ── Run ─────────────────────────────────────────────────────────────────── */
 
-/**
- * The primary button is the run control and the cancel control.
- *
- * There is no dialog any more, so a run needs an escape hatch and the button
- * that started it is the only thing on screen that can stop it. Pressing it
- * again while a run is live cancels, rather than being inert.
- */
+/** The button that started a run is the only control that can stop it, so it is never disabled. */
 async function onSubmit(event) {
   event?.preventDefault();
 
@@ -455,11 +627,26 @@ async function onSubmit(event) {
 
   clearCompareError();
 
+  // No key, no run. The server holds none, so this is the only place the
+  // requirement can be caught — and catching it here opens the thing that fixes
+  // it, instead of spending a round trip to be told the same thing.
+  if (!hasTinyfishKey()) {
+    openSettings();
+    return;
+  }
+
   if (state.mode === 'guide') return runGuide(input);
   return runCompare(input);
 }
 
-/** Guide runs stream, so the dialog can show the read set as it grows. */
+/**
+ * Guide runs stream, so the dialog can show the read set as it grows.
+ *
+ * Read over `fetch` rather than `EventSource`, because the API key has to travel
+ * as a header and EventSource cannot send one. That is the whole reason this is
+ * not the three-line constructor it otherwise would be; the frames are still the
+ * same wire format, just parsed here.
+ */
 function runGuide(input) {
   const params = new URLSearchParams({
     input,
@@ -469,42 +656,104 @@ function runGuide(input) {
 
   startRun({ status: 'Starting the crawl' });
 
-  const events = new EventSource(`/api/v1/stream?${params}`);
-  state.events = events;
+  const controller = new AbortController();
+  state.abort = controller;
 
-  events.addEventListener('stage', (event) => {
-    noteStage(JSON.parse(event.data));
+  readEventStream(`/api/v1/stream?${params}`, {
+    signal: controller.signal,
+    headers: authHeaders(),
+    on: handleStreamEvent,
+  }).catch((err) => {
+    if (err?.name === 'AbortError') return;
+    finish('error', err.message || 'The connection dropped before the run finished.', err.code);
   });
+}
 
-  events.addEventListener('done', (event) => {
-    const guide = JSON.parse(event.data);
-    state.guide = guide;
-    renderGuide(guide);
+function handleStreamEvent(event, data) {
+  if (event === 'stage') {
+    noteStage(data);
+    return;
+  }
 
-    const warnings = warningsToAlert(guide);
+  if (event === 'done') {
+    state.guide = data;
+    renderGuide(data);
+
+    const warnings = warningsToAlert(data);
     // The guide is handed to finish so it can hand the mark to the grid, which
     // is what decides when the panel stands down.
-    finish(warnings ? 'warn' : null, warnings?.message, null, warnings?.detail, guide);
-  });
+    finish(warnings ? 'warn' : null, warnings?.message, null, warnings?.detail, data);
+    return;
+  }
 
-  events.addEventListener('error', (event) => {
-    // The browser fires a generic `error` on a network drop too, so only treat
-    // it as a failure when the server sent a structured error frame.
-    if (event.data) {
-      const payload = JSON.parse(event.data);
-      finish('error', payload.message, payload.code);
-    } else {
-      finish('error', 'The connection to the server dropped before the run finished.', 'STREAM_CLOSED');
-    }
-  });
+  if (event === 'error') finish('error', data.message, data.code);
+}
 
-  events.onerror = () => {
-    // onerror after `done` is only the stream closing.
-    if (state.running) {
-      events.close();
-      setBusy(false);
+/**
+ * Read a `text/event-stream` response and hand each frame to `on`.
+ *
+ * A blank line ends a frame, `data:` lines accumulate into one payload, and a line
+ * beginning with a colon is the server's keep-alive comment, which carries nothing.
+ * Multi-line data is joined with newlines, as the format specifies.
+ *
+ * Aborting mid-stream rejects with an AbortError the caller ignores, which is what
+ * makes Cancel work.
+ */
+async function readEventStream(url, { signal, headers, on }) {
+  const response = await fetch(url, { headers, signal });
+
+  if (!response.ok || !response.body) {
+    // A refusal before the stream opens is an ordinary JSON error, not a frame.
+    const payload = await response.json().catch(() => null);
+    const error = new Error(payload?.error?.message || `The server refused the run (HTTP ${response.status}).`);
+    error.code = payload?.error?.code || `HTTP_${response.status}`;
+    throw error;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      let split;
+      while ((split = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, split);
+        buffer = buffer.slice(split + 2);
+
+        const parsed = parseEventFrame(frame);
+        if (parsed) on(parsed.event, parsed.data);
+      }
     }
-  };
+  } finally {
+    // Cancel releases the connection on a stream the caller walked away from.
+    reader.cancel().catch(() => {});
+  }
+}
+
+function parseEventFrame(frame) {
+  let event = 'message';
+  const data = [];
+
+  for (const line of frame.split('\n')) {
+    if (line.startsWith(':')) continue;
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+  }
+
+  if (!data.length) return null;
+
+  try {
+    return { event, data: JSON.parse(data.join('\n')) };
+  } catch {
+    // A frame that is not JSON is a server bug, not something to fail a run over.
+    return null;
+  }
 }
 
 /** Compare posts one document and renders it as a matrix. */
@@ -532,7 +781,7 @@ async function runCompare(input) {
   try {
     const response = await fetch('/api/v1/compare', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       signal: controller.signal,
       body: JSON.stringify({ input, competitors }),
     });
@@ -563,21 +812,10 @@ async function runCompare(input) {
 /* ── The panel morph ─────────────────────────────────────────────────────── */
 
 /**
- * Move the hero between its two shapes.
- *
- * idle     centred in the full-height gradient
- * running  docked left as a panel, with the orb beneath the controls
- *
- * There is no third shape. Once a run has started the panel stays for the rest of
- * the session, so the controls a second run needs are already in place beside the
- * document the first one produced. The only way back is resetToIdle, which is
- * what New run and a reload both amount to.
- *
- * The end states are declared in CSS. The motion between them is here, because
- * CSS cannot transition a change of layout position without animating layout
- * properties, which forces a reflow on every frame of the transition.
- *
- * Reduced motion skips the whole thing and lets the class change land.
+ * Move the hero between its two shapes: centred in the gradient when idle, docked
+ * left as a panel while running. The end states are declared in CSS; the motion is
+ * here because CSS cannot transition a change of layout position without animating
+ * layout properties, which reflows on every frame.
  */
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -613,17 +851,9 @@ function setView(next) {
 
 /* ── Run ─────────────────────────────────────────────────────────────────── */
 
-/**
- * Begin a run: morph the controls into the panel, mount the orb, start the
- * grid reveal.
- *
- * The panel forms first and both animations start on the same frame, so the orb
- * and the grid are already moving by the time the morph lands. Nothing else is
- * shown: no step rail, no timer, no call log. The whole state says one thing.
- */
+/** Begin a run: morph the controls into the panel, mount the orb, start the reveal. */
 function startRun({ status }) {
   state.running = true;
-  state.startedAt = performance.now();
 
   setBusy(true);
   clearAlerts();
@@ -650,12 +880,7 @@ function startRun({ status }) {
   startReveal();
 }
 
-/**
- * The orb in the panel.
- *
- * Mounted per run and destroyed with it. It owns a rAF loop, and a canvas left
- * animating inside a hidden panel is a battery cost with nothing on screen.
- */
+/** The orb in the panel, mounted per run and destroyed with it. */
 function mountRunOrb() {
   const canvas = $('#run-orb');
   if (!canvas) return;
@@ -675,16 +900,9 @@ function mountRunOrb() {
 }
 
 /**
- * The grid reveal.
- *
- * It starts now, not when its image arrives, and waits at its cap for as long as
- * the crawl takes. That inversion is the point: the animation tracks the real
- * work rather than an asset download, which is what makes it read as "your
- * output is being built" rather than "a file is loading".
- *
- * The canvas is the output box, not a card beside it: same width, same 4:3 box
- * as a rendered page. It sits over the deck, so the guide is uncovered in place
- * rather than arriving somewhere else on screen.
+ * The grid starts now and waits at its cap for as long as the crawl takes, so the
+ * animation tracks the real work rather than an asset download. The canvas is the
+ * output box itself, so the guide is uncovered in place.
  */
 function startReveal() {
   const canvas = $('#reveal-canvas');
@@ -715,22 +933,9 @@ function hideCanvas() {
 }
 
 /**
- * Let the grid resolve, and uncover whatever is underneath.
- *
- * `logos` is the guide's mark, and there may not be one: a brand can have no
- * usable logo, and a comparison has no single mark at all because it is comparing
- * several. Neither is a reason to skip the animation, so the grid is always
- * resolved rather than snapped away. With no image it resolves to a flat field,
- * which is the component's own grey-cells fallback.
- *
- * The asset, when there is one, is chosen the way deck.js chooses it for the
- * cover, lockup first, so the mark that lands in the grid is the mark the guide
- * opens with rather than a different one.
- *
- * An inlined SVG is preferred over a remote URL, because a blob URL never taints
- * the canvas: the grid keeps the mark's own colours instead of falling back to
- * grey cells. Almost nothing in the wild ships one, though — the extractor
- * stores URLs — so the grey path is the normal one, not the exception.
+ * Let the grid resolve and uncover whatever is underneath. A brand can have no
+ * usable logo and a comparison has no single mark, so the grid is always resolved
+ * rather than snapped away; with no image it settles to a flat grey field.
  */
 function resolveReveal(logos) {
   const asset = logos?.lockup || logos?.primary || null;
@@ -761,26 +966,19 @@ function resolveReveal(logos) {
 
 function cancelRun() {
   if (!state.running) return;
-  state.events?.close();
-  state.events = null;
+  // Aborting is enough for both transports: it drops the connection, which ends
+  // the event stream as surely as closing it would.
   state.abort?.abort();
   state.abort = null;
   finish('info', 'Run cancelled. Nothing was saved.');
 }
 
 /**
- * Close out a run.
- *
- * `resolved` is the payload when there is one. Its absence means there is no
- * document to show, so the output box is taken away rather than left as an empty
- * frame with an alert floating over it.
- *
- * The panel stays either way. It only comes down in resetToIdle.
+ * Close out a run. With no resolved payload there is no document to show, so the
+ * output box is taken away rather than left as an empty frame under an alert.
  */
 function finish(kind, message, code, detail, resolved) {
   setBusy(false);
-  state.events?.close();
-  state.events = null;
   state.abort = null;
 
   // The orb has done its job either way: a failed run still had to be waited on.
@@ -808,15 +1006,10 @@ function finish(kind, message, code, detail, resolved) {
 }
 
 /**
- * Mark the run live or not, and relabel the primary button to match.
- *
- * The button is never disabled. While the panel is up it is the only control on
- * screen that can stop the run, so making it inert would take away the only
- * escape; instead it becomes the cancel affordance.
- *
- * `data-busy` is deliberately not set. Its one consumer is the button spinner,
- * and a spinner on a button labelled Cancel reads as a second progress signal
- * next to the orb that is already saying the same thing.
+ * The button is never disabled, since it is the only control that can stop a live
+ * run; it becomes the cancel affordance instead. `data-busy` is left unset because
+ * its only consumer is the spinner, and a spinner on a button labelled Cancel
+ * competes with the orb already reporting progress.
  */
 function setBusy(busy) {
   state.running = busy;
@@ -847,17 +1040,9 @@ function noteStage(stage) {
 
 /* ── Alerts ──────────────────────────────────────────────────────────────── */
 
-/*
- * Alerts float.
- *
- * They used to sit in a strip above the output, which meant a note about the
- * extraction was taking up room in front of the document it was a note about, and
- * pushing it down the page every time it appeared. Now they are transient: they
- * come in over the corner, hold long enough to be read or acted on, and go.
- *
- * Errors stay until dismissed, because an error is usually the end of the run and
- * the reason for it should still be there afterwards.
- */
+/* Alerts are transient rather than sitting above the output, where a note about the
+   extraction would take up room in front of the document it was a note about.
+   Errors persist until dismissed, because an error is usually the end of the run. */
 
 const TOAST_MS = { info: 5000, warn: 8000, error: 0 };
 
@@ -935,13 +1120,7 @@ function clearCompareError() {
 
 /* ── Guide document ──────────────────────────────────────────────────────── */
 
-/**
- * Render a guide into the page. Exported so the screenshot harness can replay
- * saved output through the exact path a live run takes.
- *
- * @param {object} guide extracted guide
- * @param {{ target?: number }} [opts]
- */
+/** Exported so the screenshot harness can replay saved output through the live path. */
 export function renderGuide(guide, opts = {}) {
   const host = $('#output');
   host.replaceChildren();
@@ -949,13 +1128,7 @@ export function renderGuide(guide, opts = {}) {
   setContextTitle(guide.identity?.name || hostOf(guide.input?.resolvedUrl || ''));
 }
 
-/**
- * Put the guide in the output box: the pages, and the toolbar above them.
- *
- * Nothing else goes in. The brand, its confidence, how many pages were read and
- * when it was generated are all still true, and none of them are the guide. The
- * output section is the document and the controls that act on it.
- */
+/** Put the guide in the output box: the pages, and the toolbar above them. */
 function composeGuide(host, guide, opts = {}) {
   const box = $('#outbox');
   box.hidden = false;
@@ -967,12 +1140,7 @@ function composeGuide(host, guide, opts = {}) {
   renderOutputBar(state.deck, guide);
 }
 
-/**
- * The toolbar above the output: turn the pages, jump to one by name, export.
- *
- * Built here rather than in deck.js because it mixes the deck's own navigation
- * with the export menu, and exporting needs the whole guide rather than the deck.
- */
+/** Lives here rather than in deck.js: the export menu needs the whole guide, not the deck. */
 function renderOutputBar(deck, guide) {
   const bar = $('#outbox-bar');
   bar.replaceChildren();
@@ -1142,8 +1310,7 @@ function hashText(text) {
 }
 
 function setContextTitle(text) {
-  // Null-safe on purpose: renderGuide is exported and also runs in the
-  // screenshot harness, which hosts only the parts of the chrome it needs.
+  // Null-safe: the screenshot harness hosts only the chrome it needs.
   const slot = $('#appbar-context');
   const label = $('#context-name');
   if (!slot || !label) return;
@@ -1159,13 +1326,8 @@ function setContextTitle(text) {
 /* ── Export ──────────────────────────────────────────────────────────────── */
 
 /**
- * What the guide can be taken away as.
- *
- * One list, used by the export menu. The label is what the person reads and the
- * format is what the renderer takes, and they are deliberately not always the
- * same string: "Style Dictionary" is the tool's name, not the file extension.
- *
- * PDF is not a renderer like the others and is handled separately below.
+ * Label and format differ deliberately: "Style Dictionary" is the tool's name, not
+ * a file extension. PDF is not a renderer and is handled separately below.
  */
 const EXPORT_FORMATS = [
   ['JSON', 'json'],

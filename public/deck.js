@@ -1,33 +1,10 @@
 /**
  * The deck: composes a paged brand guide from an extracted guide object.
  *
- * Two modes, and the difference is the whole point of this module.
- *
- * DETERMINISTIC (no LLM configured). Seven pages, and only seven:
- *
- *   Cover · Logomark · Logotype · Color palette · Typeface · Weights · Type scaling
- *
- * Every one of those is a *measurement*: a verified asset URL, a resolved hex,
- * an @font-face declaration, a size the site actually uses. Nothing on them is
- * written, because a brand cannot be summarised from a hex value. The prose on
- * those pages is assembled from measured fields and is deliberately factual
- * ("this asset was fetched back and confirmed"), never brand narrative.
- *
- * LLM (configured). The full document, including the pages that need writing:
- * the introduction, about the brand, positioning, values, tone, application. The
- * page budget from the UI drives how much is asked for.
- *
- * Two placements are rules rather than preferences, because getting either wrong
- * puts a thing on a page it does not belong to:
- *   - Section one opens with a written introduction, not a black plate.
- *   - The wordmark is typeset on the logotype page, in the logo section, and on
- *     no other page in either deck.
- *
- * The rule throughout: a page is only emitted if it can be filled truthfully,
- * and a shortfall is stated rather than padded.
- *
- * Page anatomy follows the reference deck: a running header, a rule, then
- * content on a landscape 4:3 canvas.
+ * Without an LLM: seven measured pages (cover, logomark, logotype, palette, typeface,
+ * weights, type scaling), each filled only from values read off the live site. With
+ * one: the full written document, bounded by the requested page count. A page is only
+ * emitted if it can be filled truthfully; a shortfall is stated, not padded.
  */
 
 /* ── Section map, for the full document ─────────────────────────────────── */
@@ -92,7 +69,7 @@ function inkOn(hex) {
   return luminance(hex) > 0.42 ? '#000000' : '#ffffff';
 }
 
-/** The four tint strips, mixed toward whichever end keeps them distinct. */
+/** Tint strip mixed toward whichever end keeps it distinct from the swatch. */
 function tintStrip(hex, step) {
   const towardDark = step > 0.5;
   return {
@@ -134,25 +111,9 @@ function lowerFirst(text) {
   return s.charAt(0).toLowerCase() + s.slice(1);
 }
 
-/** Join with commas and a final "and", for readable factual sentences. */
-function listPhrase(parts, conjunction = 'and') {
-  const items = parts.filter(Boolean);
-  if (!items.length) return '';
-  if (items.length === 1) return items[0];
-  return `${items.slice(0, -1).join(', ')} ${conjunction} ${items[items.length - 1]}`;
-}
-
 /* ── The page shell ─────────────────────────────────────────────────────── */
 
-/**
- * A page: running header, rule, then body.
- *
- * The reference deck fills column three with the template author's attribution.
- * That is not ours to print, and there is nothing to replace it with that a
- * reader of a brand guide needs, so the column is kept for its spacing and left
- * empty. Columns one and two hold the topic number, the page number and the
- * section, which is what actually navigates the document.
- */
+/** A page: running header, rule, then body. */
 function shell({ plate, bare, section, subsection, index }) {
   const page = el('div', 'page');
   if (plate) page.dataset.plate = 'true';
@@ -180,23 +141,7 @@ function shell({ plate, bare, section, subsection, index }) {
 
 /* ── Page renderers ─────────────────────────────────────────────────────── */
 
-/**
- * The cover: a full-bleed plate carrying the lockup.
- *
- * Left-aligned at the same 36% the section dividers use, which is what makes it
- * read as part of the same system rather than a separate splash.
- */
-/**
- * The logo a cover should show.
- *
- * `logos.lockup` is the mark plus wordmark, which is what a cover is for.
- * `logos.primary` is deliberately SVG-first and is usually the app icon, so it is
- * the fallback rather than the first choice.
- *
- * The Logotype page does not use this. A logotype is the wordmark on its own, so
- * that page sets the name; showing the lockup there would repeat the mark from
- * the page before it.
- */
+/** The mark plus wordmark, which is what a cover is for. `primary` is usually just the app icon. */
 function lockupAsset(logos) {
   return logos?.lockup || logos?.primary || null;
 }
@@ -206,9 +151,9 @@ function renderCover(body, spec) {
 
   if (spec.mark) wrap.append(spec.mark);
 
-  // The brand's own capitalisation. "tailwindcss" must not be set as
-  // "TAILWIND CSS"; the reference reads uppercase only because that is how its
-  // own wordmark happens to be drawn.
+  // The brand's own capitalisation: "tailwindcss" must not be set as "TAILWIND
+  // CSS". The reference reads uppercase only because that is how its own wordmark
+  // happens to be drawn.
   wrap.append(el('p', 'cover-name', spec.name));
   wrap.append(el('p', 'cover-sub', 'Brand Guidelines'));
 
@@ -288,8 +233,8 @@ function renderPalette(body, spec) {
     const meta = el('div', 'palette-meta');
     meta.append(el('p', 'palette-name', color.name));
 
-    // Two side-by-side value columns, as in the reference: CMYK on the left,
-    // RGB on the right. One interleaved stack would be twice as tall for no gain.
+    // Two side-by-side value columns, as in the reference: CMYK on the left, RGB on
+    // the right. One interleaved stack would be twice as tall for no gain.
     const rgb = rgbParts(color.hex);
     const cmyk = cmykOf(color.hex);
     const values = el('div', 'palette-values');
@@ -421,21 +366,9 @@ function renderConfidence(body, spec) {
 /* ── Specimen panel contents ────────────────────────────────────────────── */
 
 /**
- * A logo node.
- *
- * SVG source that the extractor read and sanitised is inlined rather than
- * loaded through `src`. That is not an optimisation: an `<img>` cannot inherit
- * from the page, so a `fill="currentColor"` logo renders as a flat black shape
- * and a brand's cyan mark arrives greyscale. Inlined, `currentColor` resolves
- * against the wrapper and the real colours come through.
- *
- * `inherit` assets have no colour of their own, so the wrapper supplies one.
- * The markup is parsed with DOMParser and adopted node by node, never assigned
- * to innerHTML, so nothing in it can execute.
- *
- * `silent` removes the node on failure instead of leaving a message. The cover
- * uses it because a stale asset URL there would otherwise print "logo asset did
- * not load" directly above the brand name.
+ * A logo node. An `<img>` cannot inherit from the page, so a `currentColor` logo
+ * arrives as a flat black shape; inlined SVG resolves against the wrapper instead.
+ * `silent` drops the node on failure rather than printing a message on the cover.
  */
 function logoImage(logo, className, { silent = false } = {}) {
   if (logo?.svg) {
@@ -448,7 +381,6 @@ function logoImage(logo, className, { silent = false } = {}) {
     try {
       const doc = new DOMParser().parseFromString(logo.svg, 'image/svg+xml');
       const svg = doc.documentElement;
-      // A parse error yields a <parsererror> root rather than throwing.
       if (svg && svg.nodeName.toLowerCase() === 'svg') {
         svg.setAttribute('focusable', 'false');
         svg.setAttribute('aria-hidden', 'true');
@@ -456,7 +388,8 @@ function logoImage(logo, className, { silent = false } = {}) {
         return holder;
       }
     } catch {
-      // Fall through to the URL below.
+      // A parse error yields a <parsererror> root rather than throwing, so fall
+      // through to the URL below.
     }
   }
 
@@ -475,46 +408,20 @@ function logoImage(logo, className, { silent = false } = {}) {
 }
 
 /**
- * Whether the plate a mark sits on should be light.
- *
- * A white mark on a white page is invisible, which is the same class of bug as
- * the greyscale one: right asset, wrong surface. The extractor measures the
- * mark's own colours, so the surface can follow the asset.
- *
- * The rule is deliberately one-sided. The plate flips to light only when the
- * source was read and measured dark, because that is the case that would
- * otherwise be invisible. Everything else keeps the dark plate the reference
- * uses:
- *
- * - `light`   a white mark, so it needs the dark plate. The reference case.
- * - `inherit` the mark has no colour of its own and takes `color` from the
- *             plate, which the panel already sets to the paper tone. Both work;
- *             the dark plate is the reference look.
- * - `unknown` a raster, or a source that carried no readable fill. No evidence
- *             either way, so the reference default stands.
+ * Whether the plate a mark sits on should be light. One-sided on purpose: only a
+ * mark measured dark needs flipping, since that is the case that would otherwise be
+ * invisible on the dark plate.
  */
 function plateIsLight(tone) {
   return tone === 'dark';
 }
 
-/**
- * The brand's real name, never the URL it was reached at.
- *
- * The extractor resolves this from the site's own metadata, so "linear.app"
- * becomes "Linear". `identity.source.basis` records where it came from, which is
- * worth surfacing when the only source available was the domain itself.
- */
+/** The brand's own name, never the URL it was reached at. */
 function brandName(identity) {
   return String(identity?.name || identity?.domain || 'Unknown brand').trim();
 }
 
-/**
- * The logotype page's opening sentence.
- *
- * The extractor's rationale usually opens by naming the family ("A single
- * family, Inter Variable, does all the work"), so blindly prefixing "The
- * wordmark is set in Inter Variable." says the same words twice in one line.
- */
+/** Avoids naming the family twice when the extractor's rationale already opens with it. */
 function logotypeSentence(family, rationale) {
   if (!family) return 'No heading typeface was declared by this site, so no logotype can be set from the extraction.';
   if (!rationale) return `The wordmark is set in ${family}.`;
@@ -524,15 +431,7 @@ function logotypeSentence(family, rationale) {
   return `The wordmark is set in ${family}. ${rationale}`;
 }
 
-/**
- * What the logotype page shows.
- *
- * A logotype is the wordmark on its own, so the name is typeset in the brand's
- * heading face rather than cropped out of a lockup file. That is also what the
- * reference does: its logotype page is set type inside a bordered box, not an
- * image. Showing the full lockup here would just repeat the mark from the
- * previous page.
- */
+/** The wordmark as set type, not cropped out of a lockup file. */
 function wordmarkNode(name) {
   const node = el('p', 'specimen-sample', name);
   node.style.fontSize = '86px';
@@ -540,21 +439,8 @@ function wordmarkNode(name) {
 }
 
 /**
- * The logotype page, shared by both decks.
- *
- * One definition, because the wordmark belongs to exactly one place in a brand
- * guide: the logo section, on the page after the logomark. When the two decks
- * each described it, the positioning page grew a wordmark panel of its own,
- * because a panel was wanted there and the wordmark was the panel.
- *
- * A logotype is the wordmark on its own, so the name is typeset in the brand's
- * heading face rather than cropped out of a lockup file. That is also what the
- * reference does: its logotype page is set type inside a bordered box, not an
- * image. Showing the full lockup here would just repeat the mark from the
- * previous page.
- *
- * @param {string} name the brand's own name
- * @param {object} typography the extracted type
+ * The logotype page, shared by both decks. The wordmark belongs to exactly one place,
+ * so it is set as type in the brand's heading face rather than cropped from a lockup.
  */
 function logotypePageSpec(name, typography) {
   const pairing = typography.pairing || {};
@@ -594,12 +480,9 @@ function sampleFor(use) {
 }
 
 /**
- * The weight stops worth printing for one family.
- *
- * A `@font-face` with `font-weight: 100 900` is a variable axis, not a list of
- * two weights, and taking the first three digits of it would label every row
- * "Thin". A declared range is sampled at the stops a brand guide documents,
- * while a list of discrete weights is taken as given.
+ * `font-weight: 100 900` is a variable axis, not two weights, so a range is sampled
+ * at the stops a brand guide documents. Taking its first digits would label every row
+ * "Thin".
  */
 function weightStops(weights, limit = 4) {
   const discrete = [];
@@ -688,12 +571,7 @@ const TOKEN_NAMESPACES = new Set(['color', 'colour', 'colours', 'colors', 'bs', 
  */
 const GENERIC_ROLES = new Set(['primary', 'secondary']);
 
-/**
- * The brand's own name for a colour, taken from the CSS custom property that
- * declared it. The extractor labels #7070FF "royalblue" because that is the
- * nearest CSS named colour in Lab space, which is a measurement artefact; the
- * site itself calls it `--color-link-primary`.
- */
+/** The site's own name for a colour, from the custom property that declared it. */
 function fromTokenName(token) {
   const raw = token.tokens?.find((name) => typeof name === 'string');
   if (!raw) return '';
@@ -707,10 +585,7 @@ function fromTokenName(token) {
   return titleCase(words.join(' '));
 }
 
-/**
- * Name each swatch, avoiding repeats on one spread. Roles first, then the CSS
- * token name wherever the role is missing, too generic, or already taken.
- */
+/** Name each swatch, avoiding repeats on one spread: role, then CSS token, then index. */
 function swatchNames(tokens) {
   const used = new Set();
 
@@ -730,11 +605,7 @@ function swatchNames(tokens) {
 /** Quotes already spent on the current spread. Reset by the composer. */
 const printedEvidence = new Set();
 
-/**
- * Pick the supporting line for a pillar, skipping one already used above it.
- * Two pillars can share the same top headline, and a page that quotes the same
- * sentence twice reads as a bug rather than as evidence.
- */
+/** Two pillars can share a headline; quoting the same sentence twice reads as a bug. */
 function pillarEvidence(pillar) {
   const quote = (pillar.support || []).find((s) => s?.text && !printedEvidence.has(s.text));
   if (quote) {
@@ -744,13 +615,7 @@ function pillarEvidence(pillar) {
   return `Appears on ${Math.round((pillar.prevalence || 0) * 100)}% of the pages read.`;
 }
 
-/**
- * The opening sentence of the full document.
- *
- * A meta description very often opens with the company's own name, so blindly
- * prefixing it produces "GOV.UK, the best place to find government services"
- * twice on one line.
- */
+/** A meta description often opens with the name already; prefixing it repeats the name. */
 function aboutSentence(identity) {
   const description = String(identity.description || '').trim();
   const name = brandName(identity);
@@ -765,18 +630,8 @@ function plural(count, noun) {
 }
 
 /**
- * Fold a positioning line into the aim statement.
- *
- * The narration usually answers with a whole sentence that already names the
- * brand — "Linear is a purpose-built product development system…" — so prefixing
- * "Our aim is" to it printed "Our aim is linear is a purpose-built…", and adding
- * a full stop to a line that already ended in one printed two. Both were visible
- * in a real run, so the prefix is only applied when the line does not already
- * stand as a sentence about the brand.
- *
- * @param {string} positioning
- * @param {string} name
- * @returns {string|null} the statement, or null when there is nothing to say
+ * Narration usually answers with a sentence that already names the brand, so the
+ * prefix and the trailing stop are applied only when the line does not stand alone.
  */
 function aimStatement(positioning, name) {
   const text = String(positioning || '').trim().replace(/[.\s]+$/, '');
@@ -787,18 +642,9 @@ function aimStatement(positioning, name) {
 }
 
 /**
- * The two columns of the introduction.
- *
- * The reference opens with a page of prose about what the guidelines are for, and
- * this is that page. It cannot be assembled from a hex value, so it is written
- * from the two things that are actually true at this point in the pipeline: what
- * the extraction measured, and what the narration layer said about the voice. It
- * asserts no value, ambition or claim about the brand that the extraction did not
- * produce, and it copies nothing from the reference — the reference's own text
- * describes its author's brand, not this one.
- *
- * Both columns are always several sentences. A one-line introduction is not a
- * summary of anything, and an empty one is worse than leaving the page out.
+ * The two columns of the introduction. This page cannot be assembled from a hex
+ * value, so it is written from what the extraction measured and what the narration
+ * said about the voice, asserting nothing else.
  *
  * @param {object} guide
  * @returns {string[][]} one array of sentences per column
@@ -827,8 +673,8 @@ function introductionColumns(guide) {
 
   const right = [];
 
-  // The narration layer's read on the voice, which is the one thing on this page
-  // that is written rather than measured, and belongs to the introduction.
+  // The narration layer's read on the voice: the one thing on this page that is
+  // written rather than measured, so it belongs in the introduction.
   if (narrative.toneSummary) right.push(narrative.toneSummary);
 
   right.push(
@@ -851,15 +697,11 @@ function introductionColumns(guide) {
 /* ── The deterministic deck: seven measured pages ───────────────────────── */
 
 /**
- * The only pages a brand can be documented with without writing anything.
+ * The only pages a brand can be documented with without writing anything. The prose
+ * stays descriptive of the extraction, never of the brand: "this asset was fetched
+ * back and confirmed" is true, "this symbolises our precision" would be invention.
  *
- * Every field below is read from the live site. The prose is assembled from
- * those fields and stays descriptive of the extraction rather than the brand,
- * because "this asset was fetched back and confirmed" is true and "this
- * symbolises our commitment to precision" would be invention.
- *
- * Topic numbers are fixed to the reference deck so the pages line up with the
- * printed sequence: 2.1, 2.2, 3.1, 4.1, 4.2, 4.3.
+ * Topic numbers are fixed to the reference deck: 2.1, 2.2, 3.1, 4.1, 4.2, 4.3.
  */
 function measuredDeck(guide) {
   const identity = guide.identity || {};
@@ -869,10 +711,6 @@ function measuredDeck(guide) {
   const name = brandName(identity);
 
   const pages = [];
-  /** Pages that could not be built, and why. Reported rather than padded over. */
-  const skipped = [];
-
-  const skip = (label, why) => skipped.push(`${label} (${why})`);
 
   /* Cover ---------------------------------------------------------------- */
   pages.push({
@@ -886,7 +724,6 @@ function measuredDeck(guide) {
       markUrl: logos.primary?.url || null,
     }),
   });
-
   /* Logomark ------------------------------------------------------------- */
   if (logos.primary?.url) {
     const primary = logos.primary;
@@ -999,16 +836,6 @@ function measuredDeck(guide) {
     });
   }
 
-  /* Anything above that produced no page is named here, so a six-page deck
-     explains itself instead of looking like a rendering failure. */
-  const built = new Set(pages.map((p) => p.label));
-  if (!built.has('Logomark')) skip('Logomark', 'no logo asset could be verified');
-  if (!built.has('Logotype')) skip('Logotype', 'no brand name could be resolved');
-  if (!built.has('Color Palette')) skip('Color Palette', 'no colour tokens were readable');
-  if (!built.has('Typeface')) skip('Typeface', 'no heading typeface was declared');
-  if (!built.has('Weights')) skip('Weights', 'no explicit font weights were declared');
-  if (!built.has('Type Scaling')) skip('Type Scaling', 'no type sizes were measurable');
-
   // Page numbers are fixed above, but a brand missing an asset leaves a hole.
   // Close them so the running header never claims a page that is not there.
   let next = 2;
@@ -1018,7 +845,6 @@ function measuredDeck(guide) {
     next += 1;
   }
 
-  pages.skipped = skipped;
   return pages;
 }
 
@@ -1037,14 +863,8 @@ function fullDeck(guide) {
 
   const out = [];
 
-  /*
-   * Section one opens with a written page rather than a black plate.
-   *
-   * The reference spends its front matter on prose and reserves the plate for the
-   * sections after it, so this page is marked as an opener: it carries the
-   * section's own number instead of taking a sub-number, which is what lets the
-   * contents list read "1.0 Introduction" followed by "1.1 Table of content".
-   */
+  // Section one opens with prose rather than a black plate, and carries the section's
+  // own number so the contents list reads "1.0 Introduction" then "1.1 Table of content".
   out.push({
     section: 'intro',
     label: SECTION_LABEL.intro,
@@ -1070,15 +890,9 @@ function fullDeck(guide) {
   }
 
   if (messaging.positioning?.text) {
-    /*
-     * Positioning is a statement, not a specimen.
-     *
-     * This page used to carry a wordmark panel, which put the logotype on a page
-     * in the introduction and left the logo section without one. A wordmark
-     * belongs to the logotype page and nowhere else, so this page is now the
-     * positioning line and the brand's own tagline, set as statements the way the
-     * reference sets its aim-and-vision page.
-     */
+    // Positioning is a statement, not a specimen. This page carries the positioning
+    // line and the brand's own tagline, set the way the reference sets its
+    // aim-and-vision page.
     const pairs = [{ text: messaging.positioning.text }];
     if (identity.tagline) pairs.push({ text: identity.tagline });
 
@@ -1147,8 +961,8 @@ function fullDeck(guide) {
     });
   }
 
-  // Logotype, then the asset register: the order the reference sets them in, and
-  // the order that keeps the wordmark next to the mark it belongs with.
+  // Logotype, then the asset register: the order the reference sets them in, and the
+  // order that keeps the wordmark next to the mark it belongs with.
   if (name) {
     out.push({
       section: 'logo', label: 'Logotype', title: 'LOGOTYPE',
@@ -1285,11 +1099,11 @@ function fullDeck(guide) {
 }
 
 /* ── Exported for tests ─────────────────────────────────────────────────── */
-// The DOM-bound renderers above cannot run under `node --test`, but these carry
-// the judgement calls worth pinning down: how a swatch gets its name, and how a
+// The DOM-bound renderers above cannot run under `node --test`, but these carry the
+// judgement calls worth pinning down: how a swatch gets its name, and how a
 // variable font axis becomes a list of printable weight stops.
 
-export { swatchNames, weightStops, mix, luminance, inkOn, brandName, scaleLabel, measuredDeck, plateIsLight, introductionColumns, logotypePageSpec, plural, fullDeck, aimStatement };
+export { swatchNames, weightStops, mix, luminance, inkOn, brandName, scaleLabel, measuredDeck, plateIsLight, introductionColumns, plural, fullDeck, aimStatement };
 
 /* ── Composition ────────────────────────────────────────────────────────── */
 
@@ -1299,7 +1113,7 @@ export { swatchNames, weightStops, mix, luminance, inkOn, brandName, scaleLabel,
  * @param {object} guide extracted guide
  * @param {{ target?: number }} [opts]
  */
-export function composeDeck(guide, opts = {}) {
+function composeDeck(guide, opts = {}) {
   printedEvidence.clear();
 
   const hasLlm = Boolean(guide.narrative);
@@ -1333,15 +1147,9 @@ export function composeDeck(guide, opts = {}) {
     if (spec) usable.push({ ...entry, spec });
   }
 
-  // `fullDeck` already emits the contents page, so this pass only adds the
-  // section openers. A section that opens with its contents page does not also
-  // get a plate, because in the reference the contents page *is* the opener:
-  // page one lists 1.1 Table of content under the 1.0 Introduction heading, with
-  // no plate in front of it.
-  //
-  // A written opener counts as one. The introduction page is prose rather than a
-  // plate, but it holds the section number in the same way, so it is grouped with
-  // the contents page instead of being numbered as content of its own.
+  // `fullDeck` already emits the contents page, so this pass only adds section openers.
+  // A section whose opener is the contents page (or prose) does not also get a plate,
+  // because the contents page *is* the opener in the reference.
   const ordered = [];
   for (const sectionKey of SECTION_ORDER) {
     const inSection = usable.filter((e) => e.section === sectionKey);
@@ -1390,11 +1198,7 @@ export function composeDeck(guide, opts = {}) {
   };
 }
 
-/**
- * Keep the contents page, then take content pages in order. A divider is only
- * kept when at least one content page fits behind it, so the document never
- * opens a section it cannot fill.
- */
+/** Take content pages in order. A divider is kept only if a content page fits behind it. */
 function trimToBudget(ordered, budget) {
   if (ordered.length <= budget) return ordered;
 
@@ -1447,8 +1251,8 @@ function renderMeasuredPage(item, guide) {
     weights: renderWeights,
     scaling: renderScaling,
   };
-  // Built once. The spec factories build DOM, so calling it twice would render
-  // two copies of every specimen and throw one away.
+  // Built once: the spec factories build DOM, so calling it twice would render two
+  // copies of every specimen and throw one away.
   const built = item.spec();
   const spec = { ...built, title: item.title || titleCase(item.label).toUpperCase() };
   (renderers[built.render] || ((b) => pageTitle(b, spec.title)))(body, spec);
@@ -1458,8 +1262,8 @@ function renderMeasuredPage(item, guide) {
 /** One page of the full document. */
 function renderFullPage(item, outline, guide) {
   if (item.divider) {
-    // A written opener stands in for the plate: section one is introduced with
-    // prose, as the reference does, so it gets the same shell and index but the
+    // A written opener stands in for the plate: section one is introduced with prose
+    // as the reference does, so it gets the same shell and index but the
     // introduction body rather than a black panel listing the section.
     if (item.opener === 'prose') {
       const { page, body } = shell({
@@ -1538,14 +1342,7 @@ function renderStatementPair(body, spec) {
   body.append(wrap);
 }
 
-/**
- * The introduction.
- *
- * A full-width display title over two columns of body copy. Distinct from
- * `split`, where the title holds the left column beside the text: on this page the
- * title heads the whole spread rather than labelling the copy next to it, which
- * is why it needed its own renderer instead of a flag on `split`.
- */
+/** Full-width display title over two columns, unlike `split` where it labels the left column. */
 function renderIntro(body, spec) {
   body.append(el('h2', 't-display', spec.title));
 
@@ -1560,12 +1357,7 @@ function renderIntro(body, spec) {
   body.append(cols);
 }
 
-/**
- * Contents.
- *
- * Grouped into runs by section so the two-column split never orphans a row from
- * the heading it belongs to.
- */
+/** Grouped by section so the column split never orphans a row from its heading. */
 function renderContents(body, spec, outline) {
   body.append(el('h2', 't-display', 'TABLE OF CONTENT'));
 
@@ -1612,17 +1404,11 @@ function renderContents(body, spec, outline) {
 /* ── Brand token plumbing ───────────────────────────────────────────────── */
 
 /**
- * CSS custom properties for the deck.
- *
- * The document is always light. A brand guide that inherits a dark brand's
- * background stops being a document and becomes a screenshot of that brand's
- * site, and a print of it comes out as a book of black pages. So the paper and
- * the ink are fixed here and never taken from the brand.
- *
- * What the brand does change is the type it is set in, and the colour of every
- * swatch, plate and specimen drawn on the page.
+ * The document is always light. Inheriting a dark brand's background would turn the
+ * guide into a screenshot of that site, and a print of it into a book of black
+ * pages. Only the typeface comes from the brand.
  */
-export function brandVars(guide) {
+function brandVars(guide) {
   const pairing = guide.typography?.pairing || {};
   return {
     '--face-brand': pairing.heading ? `"${pairing.heading}", var(--face)` : 'var(--face)',
@@ -1632,29 +1418,9 @@ export function brandVars(guide) {
 /* ── Viewer ────────────────────────────────────────────────────────────────── */
 
 /**
- * A stepper on a fixed canvas, so one page looks the same on a laptop and on a
- * projector. The canvas never reflows: 1200x900 scaled to fit its container.
- *
- * Navigation is a native `<select>` rather than a row of jump pills. At seven
- * pages a pill row is friendlier; at the twenty-four the full document can
- * reach it wraps to three lines and stops being a toolbar.
- *
- * @param {HTMLElement} host
- * @param {object} guide
- * @param {{ target?: number }} [opts]
- */
-/**
- * Render the guide pages into a host, and hand back a controller for them.
- *
- * The deck is only the pages. The toolbar that sits above it belongs to the
- * caller, because it mixes the deck's own navigation with things the deck knows
- * nothing about, such as what the guide can be exported as. So this returns
- * `show`, the outline, and the page count, and lets the caller decide what the
- * controls around them look like.
- *
- * composeDeck no longer gathers commentary about the extraction either. It used
- * to hand back notes about what it could not document, and they were rendered
- * under the deck; nothing displays them now, so they are not assembled either.
+ * Render the pages into a host on a fixed 1200x900 canvas, so one page looks the same
+ * on a laptop and a projector and the canvas never reflows. Navigation is left to the
+ * caller, since the toolbar also owns things the deck knows nothing about.
  */
 export function renderDeck(host, guide, opts = {}) {
   host.replaceChildren();
@@ -1706,8 +1472,8 @@ export function renderDeck(host, guide, opts = {}) {
 
     for (const [i, page] of result.pages.entries()) page.hidden = i !== current;
 
-    // Restart the turn animation by clearing the flag, forcing a reflow, then
-    // setting it again. The cheapest way to replay a CSS animation.
+    // Restart the turn animation by clearing the flag, forcing a reflow, then setting
+    // it again. The cheapest way to replay a CSS animation.
     const active = result.pages[current];
     delete active.dataset.enter;
     void active.offsetWidth;

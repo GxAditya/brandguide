@@ -68,8 +68,8 @@ extraction and interpretation are separated:
 - **Deterministic core (always on, no model).** Colours, contrast math, type
   families, weights, logo verification, token graphs, and a lexical voice
   profile are computed from fetched bytes. Reproducible, auditable, free.
-- **Optional interpretation layer (`GEMINI_API_KEY`, or `LLM_API_KEY` with any
-  OpenAI-compatible endpoint).** Upgrades *narrative* only: the tone paragraph,
+- **Optional interpretation layer (a Gemini key, or any OpenAI-compatible
+  endpoint, supplied by the caller).** Upgrades *narrative* only: the tone paragraph,
   message pillars, positioning line, do/don't guidance. Every LLM sentence is
   required to carry a `sourceUrl`. The model is structurally unable to touch
   colour, type, or logo fields — they are attached after generation.

@@ -1,18 +1,8 @@
 /**
- * Colour extraction.
- *
- * Sources, in descending order of trust:
- *   1. design-system custom properties (`--color-bg-primary`) — the site stating intent
- *   2. hex/rgb/hsl frequency across real stylesheets          — usage-weighted evidence
- *   3. `<meta name="theme-color">` and the web manifest      — a fallback, not a competitor
- *
- * A declared token always outranks a frequency hit, however often the latter
- * appears. On a Tailwind-based site white is used more than any brand colour,
- * so "used most" is emphatically not "the brand colour".
- *
- * `theme-color` is deliberately *not* allowed to compete: it colours the browser
- * chrome, which is not the same thing as the page background. It is reported
- * separately and only fills `background` when the site declared nothing better.
+ * Colour extraction, in descending order of trust: design-system custom properties,
+ * then colour-literal frequency, then `theme-color` as a fallback that never
+ * competes. A declared token always outranks a frequency hit: on a Tailwind site
+ * white is used more than any brand colour, so "used most" is not "the brand colour".
  */
 
 import {
@@ -24,12 +14,8 @@ import {
 } from '../lib/css.js';
 
 /**
- * Token vocabulary.
- *
- * `--color-bg-primary` tells you the site considers this its background.
- * `--header-bg` tells you one component tinted its header. The difference is
- * whether a token's first segment is a *namespace* (a deliberate design
- * system) or a *component name*, so tokens are tiered before scoring.
+ * Tokens are tiered before scoring: `--color-bg-primary` says the site considers
+ * this its background, while `--header-bg` says one component tinted its header.
  */
 
 /** Segments that mark a token as belonging to a deliberate design system. */
@@ -79,10 +65,10 @@ const COLOUR_WORDS = new Set([
   'emerald', 'turquoise', 'lavender', 'beige', 'ivory', 'tan', 'aqua', 'fuchsia',
 ]);
 
-/** Suffixes that mean "a variant of", which demotes a token and keeps it out of the palette. */
+/** Suffixes that mean "a variant of", which demotes a token out of the palette. */
 const VARIANT_SUFFIX = /^(hover|hovered|active|focus|focused|visited|pressed|selected|disabled|open|opened|closed|tint|shade|soft|hard|ghost|washed|faded|alpha|outline|ring|shadow|1|2|3|4|5|6|7|8|9|0|10|one|two|three|stronger|weaker|lighter|darker|inverse|invert|reversed|small|medium|large)$/i;
 
-export const TIERS = {
+const TIERS = {
   declaredRole: 300, // namespaced design-system token carrying a role word
   bareRole: 250, // --bg-base, --text-color-regular
   paletteEntry: 95, // --color-white, --color-blue
@@ -92,11 +78,9 @@ export const TIERS = {
 const NEUTRAL_MAX_SATURATION = 0.14;
 
 /**
- * Alpha below this is an overlay, not a brand colour.
- *
- * Translucent tokens are common (`--header-border: #00000014`) and several of
- * them collapse onto the same opaque RGB once alpha is dropped, which used to
- * hand a brand guide a solid black "border colour" that exists nowhere.
+ * Alpha below this is an overlay, not a brand colour. Several translucent tokens
+ * collapse onto the same opaque RGB once alpha is dropped, which would otherwise
+ * hand the guide a solid black "border colour" that exists nowhere.
  */
 const OPAQUE_THRESHOLD = 0.6;
 
@@ -130,11 +114,10 @@ export function classifyToken(name) {
   let role = null;
   let roleIndex = -1;
   if (roleHits.length) {
+    // A container word names a place, not a purpose: `--govuk-surface-text-colour`
+    // is a text colour that happens to sit on a surface, and reading it as
+    // `surface` gave GOV.UK a card colour identical to its body text.
     const first = roleHits[0];
-    // A container word is a place, not a purpose. `--govuk-surface-text-colour`
-    // is a *text* colour that happens to sit on a surface; reading it as
-    // `surface` handed GOV.UK a card colour identical to its body text, which
-    // then scored 1:1 contrast and reported as a WCAG failure.
     const next = roleHits.find((hit) => !CONTAINER_WORDS.has(segments[hit.index]));
     const chosen = first && CONTAINER_WORDS.has(segments[first.index]) && next ? next : first;
     role = chosen.role;
@@ -158,15 +141,14 @@ export function classifyToken(name) {
   // `--color-brand-text` names the text colour *on* the brand colour.
   const onPrimary = role === 'primary' && after.some((s) => TEXT_WORDS.has(s));
 
-  // A trailing `colour`/`color` marks a design-system token whatever the prefix
-  // is called. GOV.UK ships `--govuk-brand-colour`, `--govuk-text-colour` and
-  // a dozen more; none of those would be recognised without this rule, and a
-  // brand guide for GOV.UK that cannot see the GOV.UK brand blue is useless.
+  // A trailing `colour`/`color` marks a design-system token whatever the prefix is
+  // called: GOV.UK ships `--govuk-brand-colour` and `--govuk-text-colour`, and
+  // neither would be recognised without this rule.
   const namespacedByColourWord = endsWithColourWord && segments.length >= 3;
 
   // A bare token is only trusted when the role word leads the whole name
-  // (`--bg-base`). `--header-bg` and `--plan-tail-accent` lead with a component
-  // name, so they stay component-scoped.
+  // (`--bg-base`). `--header-bg` leads with a component name, so it stays
+  // component-scoped.
   const tier = hasNamespace
     ? 'declaredRole'
     : namespacedByColourWord
@@ -186,8 +168,7 @@ const QUALIFIERS = new Map([
 
 /**
  * Scope words. `--govuk-body-background-colour` is the page background;
- * `--govuk-template-background-colour` is one component. Without this the
- * winner between them is arbitrary.
+ * `--govuk-template-background-colour` is one component.
  */
 const PAGE_SCOPE = /(^|-)(body|page|global|document|root|app|site|main|default)(-|$)/;
 const COMPONENT_SCOPE = new RegExp(
@@ -203,15 +184,11 @@ const COMPONENT_SCOPE = new RegExp(
     'dock', 'titlebar', 'statusbar', 'breadcrumb', 'overlay', 'dialog', 'drawer',
   ].join('|')})(-|$)`, 'i');
 
-/**
- * @param {{ sheets: object[], head: object, manifest: object|null }} input
- * @returns {object} colour section
- */
+
 export function extractColors({ sheets = [], head = {}, manifest = null }) {
   const combined = sheets.map((s) => stripComments(s.css)).join('\n');
   const props = parseCustomProperties(combined);
   const occurrences = findColourOccurrences(combined);
-
   /** @type {Map<string, object>} */
   const candidates = new Map();
   let overlays = 0;
@@ -242,20 +219,18 @@ export function extractColors({ sheets = [], head = {}, manifest = null }) {
     }
     if (tokenName) entry.tokens.add(tokenName);
     if (TIERS[tier] > TIERS[entry.tier]) entry.tier = tier;
-    // Hover and tint shades are real, but they are not the brand palette a
-    // marketer should be handed as "a colour". Only an explicit `variant: false`
-    // clears the flag, so a frequency hit cannot promote a tint.
+    // Hover and tint shades are real, but they are not a colour a marketer
+    // should be handed. Only an explicit `variant: false` clears the flag.
     if (variant === false) entry.onlyVariants = false;
   };
 
   // --- 1. Design-system tokens ---------------------------------------------
   //
-  // Usage matters as much as the name. A token referenced in twenty rules is a
-  // load-bearing part of the design system; a token referenced once is one
-  // component's own constant that happens to be named like a role. Notion
-  // declares `--browser-text-color: #1313ba` for its in-app browser chrome and
-  // `--color-nav-text: #1313ba` for the nav bar. Both read as "text" until you
-  // notice neither is the colour of a paragraph.
+  // Usage counts as much as the name: a token referenced in twenty rules is
+  // load-bearing, one referenced once is a component constant that happens to be
+  // named like a role. Notion declares `--browser-text-color` for its in-app
+  // browser chrome and `--color-nav-text` for the nav bar; both read as "text"
+  // until you notice neither is the colour of a paragraph.
   const usage = new Map();
   for (const name of props.keys()) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -280,12 +255,10 @@ export function extractColors({ sheets = [], head = {}, manifest = null }) {
     if (PAGE_SCOPE.test(name)) score += 70;
     if (COMPONENT_SCOPE.test(name)) score -= 55;
 
-    // How widely the token is applied, on a log scale so one runaway count
-    // cannot dominate, and capped so usage alone can never beat a tier gap.
+    // Log scale, capped, so one runaway count cannot dominate and usage alone can
+    // never beat a tier gap. A token referenced by nothing is demoted rather
+    // than dropped: it can legitimately be applied only from inline styles.
     score += Math.min(60, Math.log2(usedIn + 1) * 22);
-    // Referenced by nothing at all: almost certainly a one-off constant rather
-    // than a system token. Demoted rather than dropped, because a token can
-    // legitimately be applied only from inline styles we never see.
     if (usedIn === 0) score -= 45;
 
     upsert(rgb, {
@@ -315,8 +288,8 @@ export function extractColors({ sheets = [], head = {}, manifest = null }) {
   }
 
   // --- 2. Usage frequency, capped so it can never outrank a declared token --
-  const maxFrequency = Math.max(1, ...occurrences.counts.values());
-  for (const [literal, count] of occurrences.counts) {
+  const maxFrequency = Math.max(1, ...occurrences.values());
+  for (const [literal, count] of occurrences) {
     const rgb = parseColor(literal);
     if (!rgb || rgb.a === 0) continue;
     const isNeutral = rgbToHsl(rgb).s <= NEUTRAL_MAX_SATURATION;
@@ -430,12 +403,9 @@ function dedupeSimilar(tokens) {
 }
 
 /**
- * Map colours onto the roles a designer actually needs, so the palette is
- * usable rather than a swatch dump.
- *
- * The neutral ramp stays out of `roles` — it is a scale, not a role — and text
- * is chosen from the far end of that ramp relative to the background's
- * lightness, because a dark-background site needs light text.
+ * Map colours onto designer roles. The neutral ramp stays out of `roles` — it is a
+ * scale, not a role — and text comes from the far end of it relative to the
+ * background's lightness.
  */
 function assignRoles({ ranked, core, neutrals, head, manifest }) {
   const roles = {};
@@ -444,11 +414,9 @@ function assignRoles({ ranked, core, neutrals, head, manifest }) {
   const claimed = [];
 
   /**
-   * Assign a role from a declared token.
-   *
-   * `allowDuplicate` covers the roles that legitimately coincide with another —
-   * a link colour that *is* the brand colour is normal, whereas an accent
-   * identical to the primary is not a separate finding.
+   * Assign a role from a declared token. `allowDuplicate` covers roles that
+   * legitimately coincide: a link colour that *is* the brand colour is normal, an
+   * accent identical to the primary is not a separate finding.
    */
   const take = (name, filter, { allowDuplicate = false } = {}) => {
     if (roles[name]) return;
@@ -464,11 +432,10 @@ function assignRoles({ ranked, core, neutrals, head, manifest }) {
     else claimed.push(hit.hex);
     roles[name] = hit.hex;
   };
-
   /**
-   * Chroma, not HSL saturation, decides whether a colour can play a brand role.
-   * A pale grey reports high HSL saturation near white, which is how a
-   * framework's default link grey ends up reported as the brand's link colour.
+   * Chroma, not HSL saturation, decides whether a colour can play a brand role: a
+   * pale grey reports high saturation near white, which is how a framework's default
+   * link grey ends up reported as the brand's link colour.
    */
   const colourful = (t) => t.chroma >= 40;
   const statusColour = (t) => t.chroma >= 25;
@@ -479,9 +446,8 @@ function assignRoles({ ranked, core, neutrals, head, manifest }) {
   take('accent', colourful);
   take('secondary', colourful);
   take('surface', () => true, { allowDuplicate: true });
-  // No chroma filter here: a legitimate hairline can be almost neutral, as
-  // GOV.UK's `#e9e8ea` and Linear's `#e9e8ea` both are. Invisibility is
-  // handled below by comparing the border against the background.
+  // No chroma filter: a legitimate hairline can be almost neutral. Invisibility
+  // is handled below, by comparing the border against the background.
   take('border', () => true, { allowDuplicate: true });
   take('muted', () => true, { allowDuplicate: true });
   take('link', colourful, { allowDuplicate: true });
@@ -495,8 +461,7 @@ function assignRoles({ ranked, core, neutrals, head, manifest }) {
   // Anything the site did not name is derived from what it did declare, and
   // flagged as inferred rather than passed off as measured. Background comes
   // first, because whether text should be light or dark depends on it.
-  if (!roles.background) {
-    roles.background = head.themeColor || manifest?.themeColor || ramp['0'] || '#ffffff';
+  if (!roles.background) {    roles.background = head.themeColor || manifest?.themeColor || ramp['0'] || '#ffffff';
     inferred.push('background');
   }
 
@@ -539,8 +504,7 @@ function assignRoles({ ranked, core, neutrals, head, manifest }) {
     inferred.push('surface');
   }
   if (!roles.border || (bg && deltaE2000(parseColor(roles.border), bg) < DEDUPE_THRESHOLD)) {
-    // A "border" the same colour as the page is invisible. Derive a real
-    // hairline rather than shipping a token nobody can see.
+    // A border the same colour as the page is invisible, so derive a real hairline.
     roles.border = bg ? toHex(mix(bg, fg || { r: 0, g: 0, b: 0, a: 1 }, 0.14)) : roles.border;
     inferred.push('border');
   }
@@ -554,9 +518,9 @@ function assignRoles({ ranked, core, neutrals, head, manifest }) {
     shared.push('link is the same colour as primary');
   }
 
-  // Status colours, inferred only when the site declared no status token and a
-  // conventional palette entry exists. Green-means-success is close to
-  // universal, but it is still an inference, so it is labelled as one.
+  // Inferred only when the site declared no status token and a conventional palette
+  // entry exists. Green-means-success is close to universal, but it is still an
+  // inference, so it is labelled as one.
   const STATUS_FALLBACK = { success: /green/, warning: /yellow|orange|amber/, error: /red|crimson/ };
   for (const [role, re] of Object.entries(STATUS_FALLBACK)) {
     if (roles[role]) continue;

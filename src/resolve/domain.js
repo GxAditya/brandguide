@@ -1,9 +1,7 @@
 /**
- * Name -> domain, via TinyFish Search.
- *
- * Given "Vercel" we need the official website, not a listicle or a LinkedIn
- * profile. There is no hardcoded brand table here; candidates are ranked on
- * signals that are generic to any company.
+ * Name -> domain, via TinyFish Search. Given "Vercel" we need the official website,
+ * not a listicle or a LinkedIn profile, so candidates are ranked on signals generic
+ * to any company rather than a hardcoded brand table.
  */
 
 import { normaliseUrl } from './input.js';
@@ -18,12 +16,8 @@ const NON_CANONICAL = [
 ];
 
 /**
- * Platforms that host a company's profile but are not its website.
- *
- * Searching "linear official website" reliably returns a LinkedIn company page
- * near the top. It is a page *about* the brand, not the brand, and it is also
- * the most likely result to be blocked by bot protection. This is generic
- * knowledge about the shape of the web, not a list of brands.
+ * Platforms that host a company's profile but are not its website — a page *about*
+ * the brand, and the result most likely to be blocked by bot protection.
  */
 const PROFILE_PLATFORMS = [
   /(^|\.)(linkedin\.com|facebook\.com|instagram\.com|x\.com|twitter\.com|youtube\.com|tiktok\.com|pinterest\.com|reddit\.com)$/i,
@@ -41,8 +35,6 @@ const PROFILE_PLATFORMS = [
 const PROFILE_PATHS = /\/(company|companies|org|organisation|profile|profiles|pages?|posts?|pub|user|users|showcase)\//i;
 
 /**
- * @param {import('../tinyfish/client.js').TinyFishClient} client
- * @param {string} name
  * @returns {Promise<{ url: string, resolvedBy: 'search', candidates: object[], reasoning: string }>}
  */
 export async function resolveFromSearch(client, name) {
@@ -65,7 +57,9 @@ export async function resolveFromSearch(client, name) {
   return {
     url: best.url,
     resolvedBy: 'search',
-    candidates: candidates.slice(0, 5).map(stripInternal),
+    // Score and reasoning stay on the candidate: that is the evidence for why one
+    // domain was preferred, and a reviewer should see it rather than trust it.
+    candidates: candidates.slice(0, 5),
     reasoning: best.reasoning,
   };
 }
@@ -85,10 +79,9 @@ function rankCandidates(results, name) {
 
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
-    // Scoring works on URL parts, never on the raw string. A search result
-    // carrying `?srsltid=...` used to be scored as though the tracking
-    // parameter were a path segment, which promoted a deep localised page over
-    // the company's own homepage.
+    // Scoring works on URL parts, never the raw string: a result carrying
+    // `?srsltid=...` used to be scored as though the tracking parameter were a
+    // path segment, promoting a deep localised page over the homepage.
     const path = parsed.pathname.replace(/\/index\.html?$/i, '/');
     const barePath = path === '/' ? '' : path.replace(/^\/|\/$/g, '');
 
@@ -135,18 +128,16 @@ function rankCandidates(results, name) {
     }
 
     // A subdomain is a department, not a company. Searching "patagonia" returns
-    // `wornwear.patagonia.com` -- a resale line with its own dark palette --
-    // above `patagonia.com` itself, purely because the string "patagonia"
-    // appears in its hostname. The brand's main site is the registrable domain.
+    // `wornwear.patagonia.com` — a resale line with its own dark palette — above
+    // `patagonia.com` itself, purely because "patagonia" is in its hostname.
     const labels = host.replace(/^www\d?\./, '').split('.').filter(Boolean);
     if (labels.length > 2) {
       score -= 35;
       reasons.push('a subdomain, not the brand main site');
     }
 
-    // A hosted profile is not the company's website. Reject it outright
-    // rather than merely demoting it: a LinkedIn page will usually fail to
-    // render for an anonymous crawler anyway.
+    // A hosted profile is rejected outright rather than merely demoted: a LinkedIn
+    // page will usually fail to render for an anonymous crawler anyway.
     if (PROFILE_PLATFORMS.some((re) => re.test(host))) {
       rejected = true;
       reasons.push(`${host} hosts third-party profiles, not a brand site`);
@@ -168,7 +159,6 @@ function rankCandidates(results, name) {
 
     // Drop every query string from the URL we will actually crawl.
     const clean = `${parsed.origin}${parsed.pathname}`;
-
     scored.push({
       url: clean,
       host,
@@ -184,31 +174,5 @@ function rankCandidates(results, name) {
   return scored.filter((c) => !c.rejected && c.score > 0);
 }
 
-/**
- * Candidates are returned with their score and reasoning intact: that is the
- * evidence for why one domain was preferred, and a reviewer should be able to
- * see the reasoning rather than trust it.
- */
-function stripInternal(c) {
-  return c;
-}
-
-/**
- * For the /compare endpoint: find the official sites of named competitors.
- *
- * @param {import('../tinyfish/client.js').TinyFishClient} client
- * @param {string[]} names
- */
-export async function resolveMany(client, names) {
-  const out = [];
-  for (const name of names) {
-    try {
-      out.push({ name, ...(await resolveFromSearch(client, name)) });
-    } catch (err) {
-      out.push({ name, url: null, error: err.message, candidates: [] });
-    }
-  }
-  return out;
-}
 /** Exposed so the ranking rules can be tested without hitting Search. */
 export const rankCandidatesForTest = rankCandidates;

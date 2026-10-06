@@ -1,19 +1,12 @@
 /**
- * MatrixOrb.
+ * MatrixOrb: a dot field driven by an envelope and three orbiting heat sources.
  *
- * A port of the React component to plain Canvas2D, because this project has no
- * framework, no JSX and no build step. The algorithm is carried over unchanged:
- * the same envelope, the same three intensity functions, the same orbiters, the
- * same spring on scale, the same frame-rate-independent smoothing, the same
- * per-state weight blend, and the same single-frame reduced-motion path.
+ * States crossfade through a per-frame weight blend rather than cutting, and the
+ * scale springs to each state's target. Reduced motion draws a single frame and
+ * redraws only on state change.
  *
- * The React hooks map to plain calls: useRef to closure variables, useEffect to
- * mount and teardown, useSyncExternalStore to a resize listener.
- *
- * One deliberate omission: the component renders its own label from a
- * STATES map. Here the canvas is presentation-free and the caller owns the
- * surrounding text, because the label changes with what the pipeline is doing
- * rather than with the orb.
+ * The canvas is presentation-free: the caller owns any label, since it changes with
+ * what the pipeline is doing rather than with the orb.
  */
 
 const TAU = Math.PI * 2;
@@ -38,11 +31,7 @@ const ORBITERS = [
   { radius: 0.8, speed: 1.15, phase: 4, spread: 0.34 },
 ];
 
-/**
- * The level envelope, when the caller does not supply one.
- *
- * No Math.abs here: its corners read as a snap at every trough.
- */
+/** No Math.abs: its corners read as a snap at every trough. */
 function envelope(t) {
   const slow = 0.5 + 0.5 * Math.sin(t * 0.62 + 0.4);
   const fast = 0.5 + 0.5 * Math.sin(t * 1.9 + 1.1);
@@ -82,26 +71,22 @@ function intensityOf(state, d, nx, ny, t, amplitude) {
  * @param {HTMLCanvasElement} canvas
  * @param {{
  *   state?: 'idle'|'listening'|'thinking',
- *   level?: number,
  *   size?: number,
  *   color?: string,
  *   dots?: number,
  * }} [options]
- * @returns {{ setState(s: string): void, setLevel(v: number): void, redraw(): void, destroy(): void }}
+ * @returns {{ setState(s: string): void, destroy(): void }}
  */
 export function mountOrb(canvas, options = {}) {
   const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    return { setState() {}, setLevel() {}, redraw() {}, destroy() {} };
-  }
+  if (!ctx) return { setState() {}, destroy() {} };
 
   const size = options.size ?? 168;
   const color = options.color ?? '#f5bde6';
   const grid = Math.max(3, Math.round(options.dots ?? 11));
 
-  // Read by the loop through these, so changing either does not restart it.
+  // Read by the loop through this, so changing it does not restart the loop.
   let currentState = STATES.includes(options.state) ? options.state : 'idle';
-  let suppliedLevel = Number.isFinite(options.level) ? options.level : null;
 
   const dpr = () => Math.min(window.devicePixelRatio || 1, 4);
 
@@ -112,13 +97,6 @@ export function mountOrb(canvas, options = {}) {
 
   const weights = { idle: 0, listening: 0, thinking: 0 };
   weights[currentState] = 1;
-
-  // A non-finite level would stick in the smoother forever.
-  const levelAt = (t) => (
-    suppliedLevel === null
-      ? envelope(t)
-      : Math.min(1, Math.max(0, suppliedLevel))
-  );
 
   let ratio = dpr();
 
@@ -179,7 +157,7 @@ export function mountOrb(canvas, options = {}) {
   if (reduce) {
     const still = () => {
       for (const state of STATES) weights[state] = state === currentState ? 1 : 0;
-      draw(0, levelAt(0), SCALE[currentState]);
+      draw(0, envelope(0), SCALE[currentState]);
     };
     still();
     return {
@@ -188,11 +166,6 @@ export function mountOrb(canvas, options = {}) {
         currentState = next;
         still();
       },
-      setLevel(value) {
-        suppliedLevel = Number.isFinite(value) ? value : null;
-        still();
-      },
-      redraw: still,
       destroy() {},
     };
   }
@@ -215,7 +188,7 @@ export function mountOrb(canvas, options = {}) {
     last = now;
     t += dt;
 
-    const target = levelAt(t);
+    const target = envelope(t);
     const rate = target > amplitude ? ATTACK : RELEASE;
     amplitude += (target - amplitude) * (1 - Math.pow(1 - rate, dt * 60));
 
@@ -245,8 +218,7 @@ export function mountOrb(canvas, options = {}) {
     raf = 0;
   }
 
-  /* Zoom changes devicePixelRatio, and a buffer built for the old one gets
-     upscaled, so the canvas is rebuilt on resize. */
+  // Zoom changes devicePixelRatio, and a buffer built for the old one gets upscaled.
   const onResize = () => {
     const next = dpr();
     if (next === ratio) return;
@@ -278,12 +250,6 @@ export function mountOrb(canvas, options = {}) {
     setState(next) {
       // The loop retargets; it never restarts.
       if (STATES.includes(next)) currentState = next;
-    },
-    setLevel(value) {
-      suppliedLevel = Number.isFinite(value) ? value : null;
-    },
-    redraw() {
-      draw(t, amplitude, scale);
     },
     destroy() {
       stop();

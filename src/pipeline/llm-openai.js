@@ -1,18 +1,16 @@
 /**
  * OpenAI-compatible transport for the narration layer.
  *
- * One code path serves OpenAI, Groq, OpenRouter, Together, DeepSeek, Mistral, xAI,
- * Cerebras and local Ollama, because they all implement the same Chat Completions
- * shape. The only thing that varies is which optional fields a given server
- * accepts, and that is handled by the attempt ladder rather than by asking users
- * to find a provider that happens to accept all of them.
+ * One code path serves every provider implementing the Chat Completions shape. What
+ * varies is which optional fields a server accepts, which the attempt ladder handles
+ * rather than asking users to find a provider that accepts all of them.
  */
 
 const TEMPERATURE = 0.4;
 const MAX_TOKENS = 1400;
 const TIMEOUT_MS = 90_000;
 
-export class OpenAiCompatibleError extends Error {
+class OpenAiCompatibleError extends Error {
   constructor(message, { status = null } = {}) {
     super(message);
     this.name = 'OpenAiCompatibleError';
@@ -21,13 +19,10 @@ export class OpenAiCompatibleError extends Error {
 }
 
 /**
- * Attempt ladder, fullest request first. Each entry is a subset of the previous.
- *
- * `response_format: json_object` is an OpenAI extension that plenty of
- * OpenAI-compatible servers do not implement, and `max_tokens` was renamed to
- * `max_completion_tokens` for OpenAI's reasoning models. Rather than force every
- * user to find a provider that accepts both, the call degrades instead of
- * failing. This ladder is asserted by `test/llm.test.js` against a mock provider.
+ * Attempt ladder, fullest request first. `response_format: json_object` is an OpenAI
+ * extension many compatible servers lack, and `max_tokens` was renamed to
+ * `max_completion_tokens` for OpenAI's reasoning models, so the call degrades rather
+ * than failing. Asserted by `test/llm.test.js`.
  */
 function attempts({ model, system, user }) {
   const messages = [
@@ -69,8 +64,6 @@ async function failureReason(res) {
 }
 
 /**
- * @param {{ system: string, user: string }} prompt
- * @param {ReturnType<import('./llm-provider.js').resolveLlm>} config
  * @returns {Promise<string>}
  * @throws {OpenAiCompatibleError}
  */

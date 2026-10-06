@@ -1,9 +1,10 @@
 /**
- * JSON Schema for the brand guide object.
+ * JSON Schema for the brand guide object, plus a small validator covering the
+ * subset of JSON Schema this document actually uses.
  *
- * Published at GET /api/v1/schema so downstream tools can validate against it,
- * and used by the test suite to check that a real extraction satisfies its own
- * contract.
+ * A module rather than a served endpoint: the demo run validates a real
+ * extraction against it, which catches a payload drifting from its own contract
+ * rather than publishing the contract and hoping a caller reads it.
  */
 
 export const BRAND_GUIDE_SCHEMA = {
@@ -70,7 +71,6 @@ export const BRAND_GUIDE_SCHEMA = {
             format: { enum: ['svg', 'png', 'ico', 'jpg', 'jpeg', 'webp', 'gif'] },
             type: { type: 'string' },
             firstParty: { type: 'boolean' },
-            // Provenance is not optional: an unverified asset must never ship.
             verifiedBy: { const: 'tinyfish-fetch' },
             reason: { type: 'string' },
             // Sanitised SVG source, present only when it was readable. Lets a
@@ -80,8 +80,8 @@ export const BRAND_GUIDE_SCHEMA = {
             svgTone: { type: ['string', 'null'], enum: ['light', 'dark', 'inherit', 'unknown', null] },
           },
         },
-        // The mark plus wordmark, when that is a different asset from the mark.
-        // A cover or a logotype page needs this, not the app icon.
+        // The mark plus wordmark, when that is a different asset from the mark. A cover
+        // or a logotype page needs this, not the app icon.
         lockup: {
           type: ['object', 'null'],
           required: ['url', 'format', 'verifiedBy'],
@@ -251,7 +251,6 @@ export const BRAND_GUIDE_SCHEMA = {
         headlines: { type: 'array', items: { type: 'object' } },
         keywords: { type: 'array', items: { type: 'object' } },
         claims: { type: 'array', items: { type: 'object' } },
-        boilerplate: { type: 'array', items: { type: 'object' } },
       },
     },
 
@@ -324,9 +323,9 @@ export const BRAND_GUIDE_SCHEMA = {
       },
     },
 
-    // What the caller asked the guide to be. A budget, not a guarantee: a
-    // brand whose live data supports fewer pages returns fewer, and the deck
-    // reports the shortfall rather than padding the difference.
+    // What the caller asked the guide to be. A budget, not a guarantee: a brand
+    // whose live data supports fewer pages returns fewer, and the deck reports
+    // the shortfall rather than padding the difference.
     deck: {
       type: 'object',
       required: ['requestedPages'],
@@ -340,58 +339,9 @@ export const BRAND_GUIDE_SCHEMA = {
   },
 };
 
-export const IDENTITY_SCHEMA = {
-  $schema: 'https://json-schema.org/draft/2020-12/schema',
-  $id: 'https://brandkit.dev/schema/identity-1.0.0.json',
-  title: 'BrandKit visual identity',
-  type: 'object',
-  required: ['kind', 'colours', 'typography', 'designTokens', 'exports'],
-  properties: {
-    kind: { const: 'identity' },
-    colours: { type: 'object' },
-    typography: { type: 'object' },
-    tokenGraph: { type: 'object' },
-    contrast: { type: 'array' },
-    shape: { type: 'object' },
-    designTokens: { type: 'object', required: ['colour', 'typography'] },
-    exports: { type: 'object', required: ['css', 'tailwind', 'styleDictionary', 'figma'] },
-  },
-};
-
-export const VOICE_SCHEMA = {
-  $schema: 'https://json-schema.org/draft/2020-12/schema',
-  $id: 'https://brandkit.dev/schema/voice-1.0.0.json',
-  title: 'BrandKit voice report',
-  type: 'object',
-  required: ['kind', 'voice', 'corpus'],
-  properties: {
-    kind: { const: 'voice' },
-    voice: { type: 'object', required: ['ok'] },
-    consistency: { type: 'object' },
-    guidance: { type: 'object', required: ['do', 'dont'] },
-    messaging: { type: 'object' },
-    corpus: { type: 'object', required: ['pagesAnalysed', 'sentencesAnalysed'] },
-  },
-};
-
-export const COMPARE_SCHEMA = {
-  $schema: 'https://json-schema.org/draft/2020-12/schema',
-  $id: 'https://brandkit.dev/schema/compare-1.0.0.json',
-  title: 'BrandKit brand comparison',
-  type: 'object',
-  required: ['kind', 'brands'],
-  properties: {
-    kind: { const: 'compare' },
-    brands: { type: 'array', minItems: 2 },
-    comparison: { type: ['object', 'null'] },
-    positioning: { type: ['object', 'null'] },
-  },
-};
-
 /**
- * A deliberately small validator: enough to prove a real extraction satisfies
- * the published contract without pulling in a dependency. It checks the subset
- * of JSON Schema this document actually uses.
+ * Validate an instance against the subset of JSON Schema this document uses:
+ * type, enum, const, pattern, numeric bounds, required, properties and items.
  */
 export function validate(instance, schema = BRAND_GUIDE_SCHEMA, path = '$') {
   const errors = [];

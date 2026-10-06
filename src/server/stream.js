@@ -3,11 +3,14 @@
  *
  * GET /api/v1/stream?input=linear&depth=standard
  *
- * The point is legibility, not speed: a brand extraction is several seconds of
+ * The caller's keys ride in the X-BrandKit-* headers rather than the query string:
+ * this endpoint is a GET because EventSource cannot carry a body, and a secret in a
+ * URL would end up in proxy logs and browser history.
+ *
+ * The point is legibility, not speed: an extraction is several seconds of
  * TinyFish traffic, and watching each call land is the clearest possible proof
  * that a real crawl is happening rather than a canned response.
  *
- * Frames:
  *   event: stage   { stage, status, ... }   pipeline progress
  *   event: call    TinyFish request finished (surface, label, latency, urls)
  *   event: done    { guide }                 full payload
@@ -19,7 +22,7 @@ import { buildBrandGuide } from '../pipeline/brand-guide.js';
 import { DEPTHS } from '../pipeline/collect.js';
 import { clampPages } from '../lib/page-budget.js';
 
-export async function streamGuide(req, res, url) {
+export async function streamGuide(creds, res, url) {
   const input = (url.searchParams.get('input') || '').trim();
   if (!input) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -29,9 +32,8 @@ export async function streamGuide(req, res, url) {
 
   const depth = DEPTHS[url.searchParams.get('depth')] ? url.searchParams.get('depth') : 'standard';
 
-  // How many pages the rendered guide should have. This is a budget for the
-  // optional narration layer, not a promise: a brand whose live data supports
-  // fewer pages returns fewer, and the deck reports the shortfall.
+  // A budget for the optional narration layer, not a promise: a brand whose live
+  // data supports fewer pages returns fewer, and the deck reports the shortfall.
   const requestedPages = clampPages(url.searchParams.get('pages'));
 
   res.writeHead(200, {
@@ -46,13 +48,12 @@ export async function streamGuide(req, res, url) {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  // Keep intermediaries from closing an idle connection during a slow fetch.
   const heartbeat = setInterval(() => res.write(': keep-alive\n\n'), 15_000);
 
   let client;
   try {
     client = new TinyFishClient({
-      apiKey: process.env.TINYFISH_API_KEY,
+      apiKey: creds.tinyfishKey,
       onCall: (call) => {
         send('call', {
           id: call.id,
@@ -73,6 +74,7 @@ export async function streamGuide(req, res, url) {
       depth,
       pages: requestedPages,
       narrate: url.searchParams.get('narrate') !== 'false',
+      creds: creds.llm,
       onProgress: (event) => send('stage', event),
     });
 

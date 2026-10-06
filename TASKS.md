@@ -15,7 +15,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - [x] `Search` → confirm name→domain resolution shape
   - [x] Confirm no direct HTTP is needed anywhere
 - [x] **T0.2** Scaffold `brandguide/` — `package.json` (`"type":"module"`, zero
-      deps), `.env.example`, `.gitignore`, dir layout
+      deps), `.gitignore`, dir layout
 - [x] **T0.3** `src/tinyfish/client.js` — typed wrapper over
       `POST api.fetch.tinyfish.ai` + `GET api.search.tinyfish.ai`
   - [x] `X-API-Key` auth, 150 s client timeout
@@ -109,7 +109,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] **T6.2** Wire the four endpoints + supporting routes
 - [x] **T6.3** Static file serving for the UI
 - [x] **T6.4** Error envelope `{ error: { code, message, detail } }`
-- [x] **T6.5** Never log `TINYFISH_API_KEY`
+- [x] **T6.5** Never log a TinyFish key
 
 ## Phase 7 — UI
 
@@ -201,10 +201,9 @@ The single scrolling sheet became a paged document. Replaces T7.4 and T7.5.
 - [x] **T8.2** Fixture tests: canned HTML/CSS/JSON → expected extraction
 - [x] **T8.3** Live smoke script over 3+ real brands, no hardcoding
 - [x] **T8.4** Schema self-validates its own output
-- [x] **T8.5** Confirm app works with `LLM_API_KEY` unset
+- [x] **T8.5** Confirm app works with no narration key
 - [x] **T8.6** Confirm no target-site HTTP outside TinyFish (`grep fetch` audit)
-- [x] **T8.7** Gemini provider (`GEMINI_API_KEY`, `GEMINI_MODEL`), selectable from
-  `.env` alongside any OpenAI-compatible endpoint
+- [x] **T8.7** Gemini provider, selectable alongside any OpenAI-compatible endpoint
 - [x] **T8.8** Full-document fixes: a written introduction page, the wordmark
   confined to the logotype page, and `print-color-adjust` so palette swatches
   survive the print pipeline

@@ -1,18 +1,15 @@
 /**
- * Endpoint 4 — brand benchmark.
+ * The brand benchmark. Extracts the same vectors from two to five live brands and
+ * diffs them: CIEDE2000 palette distance, font overlap, cosine distance between tone
+ * vectors, and Jaccard overlap of message vocabulary.
  *
- * Extracts the same vectors from two to five live brands and diffs them:
- * CIEDE2000 distance between palettes, font overlap, cosine distance between
- * tone vectors, and Jaccard overlap of message vocabulary.
- *
- * The output is not a leaderboard. It is a positioning read: which parts of this
- * brand are genuinely its own, and where it looks like everybody else.
+ * Not a leaderboard. A positioning read: which parts of this brand are its own, and
+ * where it looks like everybody else.
  */
 
 import { collect } from './collect.js';
 import { resolveFromSearch } from '../resolve/domain.js';
-import { classifyInput } from '../resolve/input.js';
-import { rootHost } from '../resolve/input.js';
+import { classifyInput, rootHost } from '../resolve/input.js';
 import { extractColors } from '../extract/color.js';
 import { extractTypography } from '../extract/typography.js';
 import { analyseCopy, mergeVoice } from '../extract/voice.js';
@@ -22,12 +19,7 @@ import { llmInfo } from './llm.js';
 
 const MAX_BRANDS = 5;
 
-/**
- * @param {import('../tinyfish/client.js').TinyFishClient} client
- * @param {string} brand the subject
- * @param {string[]} competitors
- * @param {{ depth?: string, onProgress?: Function }} [opts]
- */
+
 export async function compareBrands(client, brand, competitors, opts = {}) {
   const names = [brand, ...competitors]
     .map((n) => String(n || '').trim())
@@ -40,8 +32,8 @@ export async function compareBrands(client, brand, competitors, opts = {}) {
     throw err;
   }
 
-  // Resolve every input to a domain first, so a typo fails fast before we
-  // spend a minute of crawl budget on it.
+  // Resolve every input to a domain first, so a typo fails fast before we spend a
+  // minute of crawl budget on it.
   const resolved = [];
   for (const name of names) {
     try {
@@ -95,7 +87,7 @@ export async function compareBrands(client, brand, competitors, opts = {}) {
     brands: profiles.map(publicProfile),
     comparison: subject ? diffBrands(subject, good.slice(1)) : null,
     positioning: subject ? buildPositioning(subject, good) : null,
-    llm: llmInfo(),
+    llm: llmInfo(opts.creds),
     provenance: {
       resolvedVia: resolved.map((r) => ({
         name: r.name,
@@ -178,9 +170,9 @@ function diffBrands(subject, others) {
     return {
       against: other.name,
       url: other.url,
-      palette: { ...palette, closestColour: palette.closest?.hex ? { hex: palette.closest.hex, name: palette.closest.name } : null },
+      palette,
       fonts,
-      tone: { ...tone, nearestAxis: tone.worstAxis },
+      tone,
       vocabulary: terms,
       distinctiveness: distinctivenessScore({ palette, fonts, tone, terms }),
     };
@@ -196,11 +188,7 @@ function diffBrands(subject, others) {
   };
 }
 
-/**
- * Palette distance: how far each colour sits from its nearest partner.
- * Averaged, with the closest pair reported because shared colour is the single
- * strongest signal of "these look like the same kind of company".
- */
+/** Averaged, with the closest pair reported: shared colour is the strongest signal of sameness. */
 function paletteDistance(a, b) {
   if (!a.length || !b.length) return { average: null, closest: null, note: 'One brand had no readable palette.' };
 
@@ -222,7 +210,6 @@ function paletteDistance(a, b) {
 
   // CIEDE2000 under ~2.3 is imperceptible; ~1 is the same colour.
   const shared = perSubject.filter((x) => x.distance < 2.3).length;
-
   return {
     average: Number(average.toFixed(1)),
     closest: closest ? { distance: Number(closest.distance.toFixed(1)), to: closest.to } : null,
@@ -305,10 +292,12 @@ function termOverlap(a, b) {
 function distinctivenessScore({ palette, fonts, tone, terms }) {
   const parts = [];
 
-  if (palette.average !== null) parts.push({ value: Math.min(100, palette.average * 2.2), weight: 0.4 });
-  if (fonts.jaccard !== null) parts.push({ value: (1 - fonts.jaccard) * 100, weight: 0.25 });
-  if (tone.distance !== null) parts.push({ value: Math.min(100, tone.distance * 100), weight: 0.25 });
-  if (terms.jaccard !== null) parts.push({ value: (1 - terms.jaccard) * 100, weight: 0.1 });
+  // The driver name rides on the part rather than being recovered from its
+  // weight, so 'type' and 'voice' stay distinguishable.
+  if (palette.average !== null) parts.push({ signal: 'palette', value: Math.min(100, palette.average * 2.2), weight: 0.4 });
+  if (fonts.jaccard !== null) parts.push({ signal: 'type', value: (1 - fonts.jaccard) * 100, weight: 0.25 });
+  if (tone.distance !== null) parts.push({ signal: 'voice', value: Math.min(100, tone.distance * 100), weight: 0.25 });
+  if (terms.jaccard !== null) parts.push({ signal: 'vocabulary', value: (1 - terms.jaccard) * 100, weight: 0.1 });
 
   if (!parts.length) return { score: 0, band: 'unknown', drivers: [] };
 
@@ -319,7 +308,7 @@ function distinctivenessScore({ palette, fonts, tone, terms }) {
     score,
     band: score > 70 ? 'highly distinctive' : score > 45 ? 'moderately distinctive' : 'blends in',
     drivers: parts
-      .map((p) => ({ signal: p.weight === 0.4 ? 'palette' : p.weight === 0.25 ? (palette && p.weight === 0.25 ? 'type' : 'voice') : 'vocabulary', value: Math.round(p.value) }))
+      .map((p) => ({ signal: p.signal, value: Math.round(p.value) }))
       .sort((a, b) => b.value - a.value),
   };
 }

@@ -1,20 +1,8 @@
 /**
- * The comparison view.
- *
- * A benchmark is not a leaderboard and it does not pretend to be one. There is
- * no winner here: there is a subject brand, and a read of how far it sits from
- * each competitor on the four signals a buyer actually notices.
- *
- * Four signals, four rows, one column per brand:
- *
- *   Palette     CIEDE2000 distance per colour, averaged, in Lab space
- *   Type        family overlap between the two sites
- *   Voice       cosine distance between normalised tone vectors
- *   Vocabulary  the words this brand owns, and the ones the set shares
- *
- * Every cell shows the number and the reading that number produces, because a
- * bare 0.42 means nothing to anyone who did not compute it. Numbers that could
- * not be measured say so rather than being rendered as zero.
+ * The comparison view: rows are signals (palette, type, voice, vocabulary) and
+ * columns are brands. A benchmark is not a leaderboard, so there is no winner —
+ * every cell shows the number and the reading that number produces, and anything
+ * unmeasurable says so rather than rendering as zero.
  *
  * No framework, no build step, no innerHTML with untrusted content.
  */
@@ -73,13 +61,7 @@ function documentHead(payload, brands, readable) {
 
 /* ── The signal matrix ────────────────────────────────────────────────────── */
 
-/**
- * Rows are signals, columns are brands.
- *
- * Signals as rows rather than columns because the question is always "how does
- * the subject differ on this one thing", which is a row, not a column. A brand
- * column therefore reads top to bottom as one profile.
- */
+/** A brand column reads top to bottom as one profile, which is why signals are rows. */
 function signalMatrix(payload, readable) {
   const card = el('section', 'bench-card');
 
@@ -97,8 +79,7 @@ function signalMatrix(payload, readable) {
   table.style.minWidth = '100%';
 
   /* Header row: one column per brand, with the domain it resolved to. */
-  const thead = el('thead');
-  const headRow = el('tr');
+  const thead = el('thead');  const headRow = el('tr');
   headRow.append(el('th', 'axis', 'Signal'));
 
   readable.forEach((brand, index) => {
@@ -117,8 +98,8 @@ function signalMatrix(payload, readable) {
 
   const tbody = el('tbody');
 
-  /* Palette. The subject column shows its own colours; the others show the
-     distance from the subject, which is the number that carries meaning. */
+  /* Palette. The subject column shows its own colours; the others show the distance
+   from the subject, which is the number that carries meaning. */
   const paletteRow = el('tr');
   paletteRow.append(axisHeader('Palette'));
   const subjectPalette = readable[0]?.palette || [];
@@ -134,8 +115,8 @@ function signalMatrix(payload, readable) {
       const diff = payload.comparison?.rows?.find((row) => row.against === brand.name);
       cell.append(valueOrMissing(diff?.palette?.average, (v) => `${v} ΔE average`));
       cell.append(el('span', 'cell-note', diff?.palette?.reading || 'not compared'));
-      if (diff?.palette?.closestColour) {
-        cell.append(el('span', 'cell-note', `closest is ${diff.palette.closestColour.hex}`));
+      if (diff?.palette?.closest?.to) {
+        cell.append(el('span', 'cell-note', `closest is ${diff.palette.closest.to}`));
       }
     }
     paletteRow.append(cell);
@@ -171,9 +152,8 @@ function signalMatrix(payload, readable) {
   });
   tbody.append(typeRow);
 
-  /* Voice. The subject column shows what was measured on its own copy; the
-     others show the distance from the subject, which is the number that
-     carries the meaning. */
+  /* Voice. The subject column shows what was measured on its own copy; the others
+   show the distance from the subject. */
   const voiceRow = el('tr');
   voiceRow.append(axisHeader('Voice'));
   readable.forEach((brand, index) => {
@@ -236,13 +216,7 @@ function axisHeader(text) {
   return cell;
 }
 
-/**
- * "6 tokens declared", "1 token declared".
- *
- * The plural is the point of the helper rather than an afterthought: a count of
- * one next to a plural noun reads as a bug, and this is a page of measurements
- * where nothing else is allowed to look careless.
- */
+/** "1 token" but "6 tokens": a count of one next to a plural reads as a bug. */
 function countLabel(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural} declared`;
 }
@@ -297,8 +271,8 @@ function distinctiveness(rows) {
     who.append(el('span', '', reading(row)));
     item.append(who);
 
-    // A hairline with no track behind it. The numeral is the value; the line
-    // only makes two rows comparable without reading them.
+    // A hairline with no track behind it. The numeral is the value; the line only
+    // makes two rows comparable without reading them.
     const meter = el('div', 'diff-meter');
     const bar = document.createElement('i');
     bar.style.width = `${Math.max(2, row.distinctiveness.score)}%`;
@@ -316,13 +290,7 @@ function distinctiveness(rows) {
   return card;
 }
 
-/**
- * The three readings as one sentence.
- *
- * Each is already a clause ("clearly related palettes"), so joining them with
- * full stops produces "clearly related palettes. related voice." and reads as a
- * bug. A comma list is the correct join for clauses.
- */
+/** Joined with commas: each reading is a clause, so a full stop reads as a bug. */
 function reading(row) {
   const parts = [row.palette?.reading, row.tone?.reading, row.fonts?.reading]
     .filter(Boolean)
@@ -434,7 +402,6 @@ function shortHost(url) {
 function setContextTitle(text) {
   const slot = $('#appbar-context');
   const label = $('#context-name');
-  if (!slot || !label || !text) return;
-  label.textContent = text;
+  if (!slot || !label || !text) return;  label.textContent = text;
   slot.hidden = false;
 }

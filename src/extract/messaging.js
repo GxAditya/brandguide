@@ -1,9 +1,9 @@
 /**
  * Messaging extraction.
  *
- * What the brand says it is for, and how it says it. Built from headings and
- * repeated vocabulary across the pages that were actually read — not from the
- * homepage tagline alone, which is the thing this whole project exists to avoid.
+ * What the brand says it is for, and how it says it — built from headings and
+ * repeated vocabulary across the pages actually read, not from the homepage
+ * tagline alone.
  */
 
 import { htmlToText, splitSentences } from './voice.js';
@@ -15,11 +15,7 @@ const STRIP_TAGS = (s) => s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 
 const BOILERPLATE_HINTS = /^(home|menu|search|sign in|log ?in|sign ?up|contact|about|blog|news|privacy|terms|cookie|skip to|next|previous|close|open|toggle)/i;
 
-/**
- * @param {object[]} pages cleaned page objects from the crawler
- * @param {object} head parsed head
- * @returns {object} messaging section
- */
+
 export function extractMessaging(pages = [], head = {}) {
   const headings = [];
   const paragraphs = [];
@@ -73,8 +69,8 @@ export function extractMessaging(pages = [], head = {}) {
 }
 
 /**
- * Tagline candidates, each with the reason it is a candidate. A real brand
- * guide needs options, and the marketer picks.
+ * Tagline candidates, each with the reason it qualifies. A real brand guide
+ * needs options, and the marketer picks.
  */
 function collectTaglineCandidates(head, headings) {
   const out = [];
@@ -101,8 +97,7 @@ function collectTaglineCandidates(head, headings) {
   }
   push(head.title, 'title tag', 'head metadata', 'the browser tab title');
 
-  // Shortest, most declarative headlines are usually the closest thing to a
-  // tagline, so put them near the front.
+  // Short, declarative headlines are usually closest to a tagline.
   return out
     .map((c) => ({ ...c, score: taglineScore(c) }))
     .sort((a, b) => b.score - a.score)
@@ -122,8 +117,8 @@ function taglineScore(candidate) {
 
 /**
  * TF salience over headings. IDF is approximated from how many pages a term
- * appears on, so a word on every page ranks lower than one that characterises
- * a specific page.
+ * appears on, so a word on every page ranks lower than one that characterises a
+ * specific page.
  */
 export function salience(texts) {
   const STOP = new Set(
@@ -170,9 +165,9 @@ export function salience(texts) {
 /**
  * Conservative stemming, used only to group near-synonyms into one pillar.
  *
- * An earlier version stripped `/s|es|ing|ers?|ed$/`, which turned "services"
- * into "servic" and "housing" into "hous". A pillar called "Servic" is worse
- * than no pillar at all, so only a trailing plural is removed.
+ * Stripping `/s|es|ing|ers?|ed$/` turned "services" into "servic" and "housing"
+ * into "hous", and a pillar called "Servic" is worse than no pillar at all, so
+ * only a trailing plural is removed.
  */
 function stem(word) {
   if (word.length <= 3) return word;

@@ -1,25 +1,20 @@
 #!/usr/bin/env node
 /**
- * BrandKit CLI.
+ * BrandKit CLI: runs an extraction and writes the result to stdout or a file, so
+ * the API can be scripted without a server running.
  *
- * Runs an extraction and writes the result to stdout or to a file. Useful for
- * scripting the API without a server running.
+ *   node src/cli.js guide linear --key sk-tinyfish-... --format markdown
+ *   node src/cli.js compare linear --key sk-... --competitors notion,asana
+ *   node src/cli.js health --key sk-tinyfish-...
  *
- *   node src/cli.js linear
- *   node src/cli.js linear --format markdown -o linear.md
- *   node src/cli.js linear --depth deep
- *   node src/cli.js compare --competitors notion,asana
- *   node src/cli.js identity linear.app
- *   node src/cli.js voice linear.app
- *   node src/cli.js health
+ * Keys are passed in rather than read from the environment, so a shell history,
+ * a CI log or a stray exported variable can never end up holding one.
  */
 
 import { writeFile } from 'node:fs/promises';
 
-import { TinyFishClient, TinyFishError, describeApiKeySource } from './tinyfish/client.js';
+import { TinyFishClient, TinyFishError } from './tinyfish/client.js';
 import { buildBrandGuide } from './pipeline/brand-guide.js';
-import { buildIdentity } from './pipeline/identity-deep.js';
-import { buildVoiceReport } from './pipeline/voice-deep.js';
 import { compareBrands } from './pipeline/compare.js';
 import { render, FORMATS } from './export/index.js';
 import { llmInfo } from './pipeline/llm.js';
@@ -32,10 +27,11 @@ Usage
 
 Commands
   guide <input>        Full brand guide: logo, palette, type, voice, messaging
-  identity <input>     Design tokens, token graph and contrast matrix
-  voice <input>        Sentence-level voice analysis and messaging pillars
   compare <input>      Benchmark against --competitors (2 to 5 brands)
-  health               Check that the TinyFish key and upstream are working
+  health               Verify the TinyFish key passed with --key
+
+Required
+  --key <key>          Your TinyFish API key, free at https://agent.tinyfish.ai/api-keys
 
 Options
   --format <fmt>       ${FORMATS.join(' | ')}            (default: json)
@@ -45,17 +41,51 @@ Options
   -o, --out <file>     Write to a file instead of stdout
   -h, --help           Show this message
 
+Optional narration layer. Without these the deterministic core runs, which is the
+recommended mode: no key, no spend, and the measured pages are produced anyway.
+
+  --llm <provider>     gemini | openai                   (default: gemini)
+  --llm-key <key>      Narration key. Gemini, or any OpenAI-compatible server
+  --llm-base <url>     Base URL for an OpenAI-compatible server. Required there
+  --llm-model <id>     Model id. Defaults to the current Gemini flagship
+
 Input can be a URL ("linear.app", "https://linear.app") or a company name
 ("linear"). Names are resolved with TinyFish Search.
 
 Everything is read live through TinyFish Search and Fetch. Nothing is stored.
 `;
 
+/** Map the narration flags onto the shape src/server/creds.js produces for the web. */
+function llmCreds(args) {
+  if (!args['llm-key']) return {};
+
+  const provider = String(args.llm || 'gemini').toLowerCase();
+  const key = args['llm-key'];
+  const base = args['llm-base'] ? String(args['llm-base']) : '';
+  const model = args['llm-model'] ? String(args['llm-model']) : '';
+
+  if (provider === 'openai' || provider === 'openai-compatible') {
+    return {
+      LLM_PROVIDER: 'openai-compatible',
+      LLM_API_KEY: key,
+      ...(base ? { LLM_BASE_URL: base } : {}),
+      ...(model ? { LLM_MODEL: model } : {}),
+    };
+  }
+
+  return { GEMINI_API_KEY: key, ...(model ? { GEMINI_MODEL: model } : {}) };
+}
+
 function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '-o' || arg === '--out') args.out = argv[++i];
+    else if (arg === '--key') args.key = argv[++i];
+    else if (arg === '--llm') args.llm = argv[++i];
+    else if (arg === '--llm-key') args['llm-key'] = argv[++i];
+    else if (arg === '--llm-base') args['llm-base'] = argv[++i];
+    else if (arg === '--llm-model') args['llm-model'] = argv[++i];
     else if (arg === '--format') args.format = argv[++i];
     else if (arg === '--depth') args.depth = argv[++i];
     else if (arg === '--competitors') args.competitors = argv[++i];
@@ -75,20 +105,15 @@ async function main() {
     process.exit(args.help ? 0 : 1);
   }
 
-  if (!process.env.TINYFISH_API_KEY) {
-    fail('TINYFISH_API_KEY is not set. Create a key at https://agent.tinyfish.ai/api-keys');
-  }
-
-  // A stale exported key silently beats the one in .env; say so before a long
-  // crawl fails with a 401 that looks like the site blocking us.
-  const keySource = describeApiKeySource();
-  if (keySource.mismatch) {
-    process.stderr.write(`\n⚠  ${keySource.message}\n\n`);
+  const apiKey = typeof args.key === 'string' ? args.key.trim() : '';
+  if (!apiKey) {
+    fail('No TinyFish key. Pass one with --key. Create a free key at https://agent.tinyfish.ai/api-keys');
   }
 
   const command = args._[0];
   const input = args._[1];
   const format = (args.format || 'json').toLowerCase();
+  const creds = llmCreds(args);
 
   if (!FORMATS.includes(format)) {
     fail(`Unknown format "${format}". Use one of: ${FORMATS.join(', ')}.`);
@@ -97,16 +122,18 @@ async function main() {
     fail('Unknown depth. Use quick, standard or deep.');
   }
 
-  const options = { depth: args.depth || 'standard', narrate: args.narrate !== false };
+  const options = { depth: args.depth || 'standard', narrate: args.narrate !== false, creds };
 
   if (command === 'health') {
-    const client = new TinyFishClient();
+    // The one place the CLI is allowed to spend a call proving a key works. The
+    // HTTP /health endpoint deliberately does not do this.
+    const client = new TinyFishClient({ apiKey });
     const started = Date.now();
     try {
       await client.search('brandkit health check', { purpose: 'Verify the TinyFish API key works.' });
-      report({ status: 'ok', tinyfish: { reachable: true, latencyMs: Date.now() - started }, llm: llmInfo() });
+      report({ status: 'ok', tinyfish: { reachable: true, latencyMs: Date.now() - started }, llm: llmInfo(creds) });
     } catch (err) {
-      report({ status: 'degraded', error: err.message, llm: llmInfo() });
+      report({ status: 'degraded', error: err.message, llm: llmInfo(creds) });
       process.exitCode = 1;
     }
     return;
@@ -116,6 +143,7 @@ async function main() {
 
   // A per-run client so the provenance log belongs to this extraction alone.
   const client = new TinyFishClient({
+    apiKey,
     onCall: (call) => {
       process.stderr.write(
         `  ${call.surface.padEnd(6)} ${String(call.label).padEnd(34)} ${String(call.durationMs).padStart(6)}ms\n`,
@@ -129,12 +157,6 @@ async function main() {
   switch (command) {
     case 'guide':
       payload = await buildBrandGuide(client, input, options);
-      break;
-    case 'identity':
-      payload = await buildIdentity(client, input, { depth: options.depth });
-      break;
-    case 'voice':
-      payload = await buildVoiceReport(client, input, options);
       break;
     case 'compare': {
       const competitors = String(args.competitors || '')

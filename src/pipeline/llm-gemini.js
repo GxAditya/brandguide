@@ -1,42 +1,27 @@
 /**
  * Gemini transport for the narration layer.
  *
- * Google does not serve `/chat/completions` on its own domain; it serves the
- * Interactions API:
- *
- *   POST https://generativelanguage.googleapis.com/v1beta/interactions
- *   x-goog-api-key: <key>
- *
- *   { "model": "gemini-3.8-flash", "input": "...", "system_instruction": "..." }
- *
- * and answers with `{ steps: [{ type: "model_output", content: [{ type: "text", text }] }] }`.
- * There is no `choices[0].message.content`, which is why this cannot simply be
- * pointed at by `LLM_BASE_URL`.
- *
- * This module owns the protocol and nothing else. It receives the prompt it is
- * given and returns text; it has no opinion about what a brand guide is.
+ * Google does not serve `/chat/completions` on its own domain, so this speaks the
+ * Interactions API: `x-goog-api-key` auth, an `input` / `system_instruction` body,
+ * and a `steps[]` reply with no `choices[0].message.content`. That is why it cannot
+ * be pointed at by `LLM_BASE_URL`.
  *
  * Docs: https://ai.google.dev/gemini-api/docs/text-generation
- *       https://ai.google.dev/gemini-api/docs/structured-output
- *       https://ai.google.dev/gemini-api/docs/thinking
  */
 
 import { GEMINI_MODELS } from './llm-provider.js';
 
 /**
- * Cap on generated tokens.
- *
- * Higher than the OpenAI path on purpose. Gemini 3 reasons before answering and
- * thinking tokens are drawn from the same output budget, so a limit sized for a
- * non-reasoning model silently truncates the JSON mid-object — which the
- * sanitiser then discards, losing the whole narrative over a token count.
+ * Higher than the OpenAI path because thinking tokens come out of the same budget:
+ * a limit sized for a non-reasoning model truncates the JSON mid-object, and the
+ * sanitiser then discards the whole narrative.
  */
 const MAX_OUTPUT_TOKENS = 4096;
 
 const TEMPERATURE = 0.4;
 const TIMEOUT_MS = 90_000;
 
-export class GeminiError extends Error {
+class GeminiError extends Error {
   constructor(message, { status = null } = {}) {
     super(message);
     this.name = 'GeminiError';
@@ -44,14 +29,8 @@ export class GeminiError extends Error {
   }
 }
 
-/**
- * The JSON Schema we ask Gemini to conform to.
- *
- * Passed through as `response_format.schema`, which makes the model emit the
- * agreed shape rather than prose around it. Everything it contains is optional
- * except `toneSummary`, so a truncated or partial response still parses.
- */
-export const NARRATIVE_SCHEMA = {
+/** Passed as `response_format.schema`. All but `toneSummary` is optional so a truncated reply still parses. */
+const NARRATIVE_SCHEMA = {
   type: 'object',
   properties: {
     toneSummary: { type: 'string', description: '2-3 sentences on how this brand writes.' },
@@ -75,13 +54,9 @@ export const NARRATIVE_SCHEMA = {
 };
 
 /**
- * Attempt ladder, fullest request first.
- *
- * Each entry is a strict subset of the one before it, so dropping fields can
- * only ever reduce what the model is asked to do. `response_format` is the most
- * likely to be refused by a proxy or an older endpoint, and `thinking_level` the
- * least likely, so they go first — but a proxy that only speaks bare Gemini is
- * still served by the last entry rather than failing outright.
+ * Attempt ladder, fullest request first, each a strict subset of the one before.
+ * `response_format` is the most likely to be refused by a proxy and `thinking_level`
+ * the least, so they go first.
  */
 function attempts({ model, system, user, config }) {
   const base = { model, input: user, system_instruction: system };
@@ -97,14 +72,7 @@ function attempts({ model, system, user, config }) {
   ];
 }
 
-/**
- * Read the model's text out of whatever shape came back.
- *
- * `steps` is the current Interactions response. The `candidates` branch is the
- * older `generateContent` shape, kept because a proxy or Vertex-compatible
- * endpoint can still return it, and a JSON body we half-understand is worse than
- * one we read fully.
- */
+/** `steps` is current; `candidates` is the older shape a proxy or Vertex endpoint may still return. */
 export function extractText(body) {
   if (Array.isArray(body?.steps)) {
     const text = body.steps
@@ -119,7 +87,6 @@ export function extractText(body) {
   // `output_text` is an SDK convenience property, not a REST field, but a proxy
   // that adds it costs nothing to read.
   if (typeof body?.output_text === 'string' && body.output_text) return body.output_text;
-
   const parts = body?.candidates?.[0]?.content?.parts;
   if (Array.isArray(parts)) {
     return parts
@@ -152,8 +119,6 @@ async function failureReason(res) {
 /**
  * Call Gemini once, degrading the request until the server accepts it.
  *
- * @param {{ system: string, user: string }} prompt
- * @param {ReturnType<import('./llm-provider.js').resolveLlm>} config
  * @returns {Promise<string>} the model's raw text output
  * @throws {GeminiError} on transport failure or after every attempt is refused
  */

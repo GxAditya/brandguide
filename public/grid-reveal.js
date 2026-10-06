@@ -1,27 +1,11 @@
 /**
- * GridReveal.
+ * GridReveal: a cell grid that splits toward a detail-first image reveal.
  *
- * A port of the React component to plain Canvas2D, because this project has no
- * framework, no JSX and no build step. The algorithm is carried over unchanged:
- * the same split tree, the same detail-first ordering, the same measurement
- * pass, the same gutters and rounding, the same pacing and the same
- * reduced-motion path.
- *
- * ONE DELIBERATE DIFFERENCE FROM THE COMPONENT.
- *
- * The component takes `progress` and finishes when its image loads, so it is
- * built for "wait for this asset". Here it is built for "the asset is already
- * known, but the work that produces the document is not finished yet". So it is
- * imperative instead of prop-driven:
- *
- *   start()      begin splitting and pace toward the cap, then wait there
- *   complete()   resolve into the image
- *
- * That is what lets the grid animate for the whole duration of a crawl and stop
- * only when the output actually exists.
- *
- * The React hooks map to plain calls: useRef to closure variables, useEffect to
- * mount and teardown, useState to the imperative calls above.
+ * Deliberately imperative rather than prop-driven. The grid must animate for the
+ * whole duration of a crawl and stop only when the output exists, so `start()` paces
+ * it to a cap and waits there, and `complete()` resolves into the image. Tying
+ * completion to the image loading — as a `progress` prop would — would leave the
+ * caller waiting on a transition that never fires when a logo URL 404s.
  */
 
 const CELLS = 180;
@@ -52,10 +36,7 @@ function smoothstep(a, b, x) {
   return t * t * (3 - 2 * t);
 }
 
-/**
- * Never reaches its ceiling, so a job that outruns the estimate keeps creeping
- * rather than pinning at 100 and looking finished when it is not.
- */
+/** Never reaches its ceiling, so a job that outruns the estimate keeps creeping. */
 function selfPaced(elapsed, duration) {
   const span = duration > 0 ? duration : 1;
   return HOLD * (1 - Math.exp(-elapsed / span));
@@ -78,10 +59,7 @@ function makeCell(x, y, w, h, parent) {
   };
 }
 
-/**
- * Splitting the biggest cell each time keeps cells square and the count rising
- * one at a time.
- */
+/** Splitting the biggest cell each time keeps cells square and the count rising one at a time. */
 function buildTree(aspect) {
   const root = makeCell(0, 0, 1, 1, null);
   const leaves = [root];
@@ -175,10 +153,7 @@ function measureTree(root, pixels, size) {
   gather(root);
 }
 
-/**
- * Reuse the same time slots so only the order changes and the pacing stays
- * identical.
- */
+/** Reuse the same time slots so only the order changes and the pacing is identical. */
 function orderByDetail(branches, openedBefore) {
   const pending = branches.filter((c) => c.splitAt > openedBefore);
   if (pending.length < 2) return;
@@ -322,7 +297,6 @@ function shade(grey, target) {
  * @param {{
  *   src?: string|null,
  *   svg?: string|null,
- *   alt?: string,
  *   aspect?: number,
  *   dark?: boolean,
  *   estimate?: number,
@@ -335,7 +309,7 @@ export function mountGridReveal(canvas, options = {}) {
   if (!ctx) return { start() {}, complete() {}, destroy() {} };
 
   const ratio = Number.isFinite(options.aspect) && options.aspect > 0 ? options.aspect : 1;
-  const estimate = options.estimatedDuration ?? options.estimate ?? 6000;
+  const estimate = options.estimate ?? 6000;
   const onComplete = options.onComplete;
 
   const { root, branches } = buildTree(ratio);
@@ -393,13 +367,10 @@ export function mountGridReveal(canvas, options = {}) {
     render(scene.image && finished ? 1 : WAIT_CAP, settled);
   }
 
-  /* ── The image ─────────────────────────────────────────────────────────
-     An inlined SVG is preferred over a remote URL, because a blob URL never
-     taints the canvas and so the grid keeps the mark's own colours. Almost
-     nothing in the wild ships one, though: the extractor records URLs, which
-     are cross-origin, so the grey-cells path is the normal one. */
+  /* An inlined SVG is preferred over a remote URL because a blob URL never taints
+     the canvas, so the grid keeps the mark's own colours. In practice the extractor
+     records cross-origin URLs, so the grey-cells path is the normal one. */
 
-  /** Adopt a decoded image, wherever in its life the run happens to be. */
   function adopt(image) {
     scene.image = image;
     loadedAt = performance.now();
@@ -514,18 +485,12 @@ export function mountGridReveal(canvas, options = {}) {
     render(split, now);
 
     if (finished && split > 0.999) {
-      // Nothing moves after this, so stop burning frames.
       render(1, now);
       stopped = true;
       stop();
-      // Unconditional, deliberately.
-      //
-      // In the component this callback is gated on the image having loaded,
-      // because there the image *was* the finish signal. Here the signal is
-      // complete(), so the image only decides how the last frame looks and must
-      // never decide whether the callback runs. Gating it means a logo URL that
-      // 404s, or a host that blocks canvas reads, leaves the caller waiting on a
-      // transition that can never happen.
+      // Unconditional: the image decides how the last frame looks, never whether
+      // this runs, or a 404 leaves the caller waiting on a transition that cannot
+      // happen.
       onComplete?.();
       return;
     }

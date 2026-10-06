@@ -1,14 +1,10 @@
 /**
  * Stylesheet reading.
  *
- * TinyFish Fetch returns a .css URL as raw text, which means the real colour and
- * type declarations can be read through the same channel as everything else.
- * No bypass, no scraping library, no headless browser.
- *
- * The hard part is coverage. A modern framework site may declare 40+ stylesheet
- * files where the brand tokens live in one of them, and the file that matters
- * has an opaque build hash in its name. Rather than guess, read broadly: Fetch
- * batches 10 URLs per call, so a large site is a handful of calls.
+ * Fetch returns a .css URL as raw text, so real colour and type declarations come
+ * through the same channel as everything else. Coverage is the hard part: a framework
+ * site may declare 40+ stylesheets with opaque build hashes, so we read broadly
+ * rather than guess which one holds the tokens.
  */
 
 const MAX_BYTES_PER_SHEET = 2_000_000;
@@ -22,8 +18,8 @@ const VENDOR_HINTS = /(^|\/)(vendor|node_modules|bootstrap|foundation|bulma|pref
 const UTILITY_ONLY = /(tailwind|bootstrap|bulma|foundation|animate|swiper|slick|owlcarousel|lodash)/i;
 
 /**
- * Rank stylesheet URLs so the most likely token carriers are fetched first.
- * `cap` then decides how far down the list we get.
+ * Rank stylesheet URLs so the most likely token carriers are fetched first; `cap`
+ * then decides how far down the list we get.
  */
 export function prioritiseStylesheets(urls) {
   return (urls || [])
@@ -38,18 +34,12 @@ export function prioritiseStylesheets(urls) {
       // weak signal that the file is hand-authored and brand-specific.
       if (/\/[a-z0-9_-]{6,10}\.[a-f0-9]{6}\.css$/i.test(path)) score -= 4;
       // Earlier in the <head> usually means more foundational.
-      score += Math.max(0, 10 - index);
-      return { url, vendor: VENDOR_HINTS.test(path), utility: UTILITY_ONLY.test(path), score, index };
+      score += Math.max(0, 10 - index);      return { url, vendor: VENDOR_HINTS.test(path), utility: UTILITY_ONLY.test(path), score, index };
     })
     .sort((a, b) => b.score - a.score);
 }
 
-/**
- * @param {import('../tinyfish/client.js').TinyFishClient} client
- * @param {string[]} stylesheetUrls
- * @param {{ cap?: number }} [opts]
- * @returns {Promise<{ sheets: object[], totalBytes: number, skipped: object[], read: number }>}
- */
+
 export async function fetchStylesheets(client, stylesheetUrls, opts = {}) {
   const cap = opts.cap ?? 24;
   const candidates = prioritiseStylesheets(stylesheetUrls);
@@ -93,8 +83,7 @@ export async function fetchStylesheets(client, stylesheetUrls, opts = {}) {
   // A partial read must never be silent. Brand tokens and @font-face rules are
   // scattered across build-hashed files, so a missing third of them is the
   // difference between a full palette and no palette.
-  const missing = chosen.length - new Set(sheets.map((s) => s.url)).size;
-  if (missing > 0) {
+  const missing = chosen.length - new Set(sheets.map((s) => s.url)).size;  if (missing > 0) {
     skipped.push({ url: `${missing} stylesheet(s)`, reason: 'did not come back from fetch' });
   }
 

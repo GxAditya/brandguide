@@ -1,15 +1,8 @@
 /**
- * Typography extraction.
- *
- * Three sources, in order of trust:
- *   1. `@font-face` declarations — the fonts the site actually ships
- *   2. `font-family` declarations weighted by frequency — the families actually used
- *   3. font CDN links (`fonts.googleapis.com`, Fontsource, Bunny, Adobe) — the vendor
- *
- * The tricky part is not finding fonts, it is *not reporting the framework's*
- * fonts. Tailwind's preflight declares `-apple-system, BlinkMacSystemFont` on
- * every element; Bootstrap declares four fallbacks nobody uses. Those are
- * filtered by frequency relative to the site's own choices.
+ * Typography extraction: `@font-face` declarations, then `font-family` weighted by
+ * frequency, then font CDN links as the vendor signal. The hard part is not finding
+ * fonts but not reporting the framework's, so a family must be both used in text and
+ * either a real webfont or dominant.
  */
 
 import {
@@ -22,29 +15,19 @@ const CSS_KEYWORDS = new Set([
   'inherit', 'initial', 'unset', 'revert', 'revert-layer', 'none', 'currentcolor',
 ]);
 
-/**
- * Icon fonts are real @font-face declarations and never a brand typeface.
- * They also tend to be the only fonts some sites ship, so filtering them is
- * what stops "Patagonia Icons" being reported as Patagonia's typeface.
- */
+/** Icon fonts are real @font-face declarations and never a brand typeface. */
 const ICON_FONT = /(icon|awesome|glyph|emoji|material-symbols|material-icons|font-?awesome|devicon|feather|octicons)/i;
 
-/**
- * Pure generics. `sans-serif` appears in most font stacks and names no
- * typeface at all, so it should never be reported as one.
- */
+/** Pure generics: present in most stacks, naming no typeface at all. */
 const GENERIC_FAMILIES = new Set([
   'sans-serif', 'serif', 'monospace', 'cursive', 'fantasy', 'ui-serif',
   'ui-sans-serif', 'ui-monospace', 'ui-rounded', 'math', 'emoji', 'fangsong',
 ]);
 
 /**
- * Values that are not typefaces at all.
- *
- * A real stylesheet contained `font-family:object-fit\: cover`, a copy-paste
- * bug on the site itself. Any family name carrying a CSS escape or a colon has
- * leaked in from a utility class, so it is rejected on sight rather than
- * guessed at.
+ * Reject anything that is not a typeface name. Real stylesheets contain
+ * `font-family:object-fit\: cover` from utility-class leakage, so an escape or a
+ * colon is rejected on sight rather than guessed at.
  */
 function isPlausibleFamily(name) {
   if (!name) return false;
@@ -83,18 +66,16 @@ const CDN_HINTS = [
   { re: /cdn\.jsdelivr\.net\/npm\/@fontsource/i, vendor: 'Fontsource' },
 ];
 
-/**
- * @param {{ sheets: object[], head: object }} input
- */
+
 export function extractTypography({ sheets = [], head = {} }) {
   const combined = sheets.map((s) => stripComments(s.css)).join('\n');
   const props = parseCustomProperties(combined);
 
   const faces = parseFontFaces(combined).filter((f) => isPlausibleFamily(f.family));
   // `@font-face{font-family:X}` declares a font; it does not set any text in it.
-  // Counting those as usage made every bundled webfont look like a typeface the
-  // brand actually types with, which is how Vercel's five decorative
-  // `GeistPixel*` graphics fonts ended up in its type system.
+  // Counting those as usage made every bundled webfont look like a face the brand
+  // types with, which is how Vercel's decorative `GeistPixel*` graphics fonts
+  // ended up in its type system.
   const usageCss = combined.replace(/@font-face\s*\{[^}]*\}/gi, ' ');
   const declaredStacks = parseFontFamilyDeclarations(usageCss);
   const detail = parseTypeDetail(combined);
@@ -127,7 +108,7 @@ export function extractTypography({ sheets = [], head = {} }) {
 
   for (const rawStack of declaredStacks) {
     // `--bs-body-font-family: "Ridgeway Sans",system-ui,...!important` and
-    // `font-family: var(--pata-font-serif)` are both common. A site that only
+    // `font-family: var(--pata-font-serif)` are both common, and a site that only
     // ever refers to its typeface through a custom property would otherwise
     // report no typeface at all.
     const stack = resolveStack(rawStack, props);
@@ -172,20 +153,10 @@ export function extractTypography({ sheets = [], head = {} }) {
   const ranked = [...tally.values()].sort((a, b) => b.count - a.count);
   const topCount = ranked[0]?.count || 1;
 
-  const families = ranked
-    /**
-     * Two things must both be true before a family is reported.
-     *
-     * Used: the site actually sets text in it. Merely shipping a webfont is not
-     * enough — Vercel bundles `GeistPixelCircle`, `GeistPixelSquare`,
-     * `GeistPixelLine`, `GeistPixelGrid` and `GeistPixelTriangle`, decorative
-     * graphics fonts no paragraph is ever set in.
-     *
-     * And either it is a real webfont the site chose, or the site leans on it
-     * heavily. Without the second test every framework reset that declares
-     * `-apple-system` on `html` and `*` reports as a brand typeface, because
-     * those rules are everywhere and mean nothing.
-     */
+  // Both tests must hold: shipping a webfont is not using it (Vercel bundles five
+  // decorative `GeistPixel*` graphics fonts), and without the dominance test every
+  // framework reset declaring `-apple-system` on `*` reports as a brand typeface.
+const families = ranked
     .filter(
       (entry) =>
         entry.usedInStack && (entry.webfont || entry.count / topCount >= 0.5),
@@ -260,13 +231,7 @@ export function extractTypography({ sheets = [], head = {} }) {
   };
 }
 
-/**
- * Resolve a font stack that leads with `var(--token)`.
- *
- * Real sites declare their typefaces once and reference them everywhere:
- * `font-family: var(--pata-font-serif)`. Following the alias is the difference
- * between reporting "Copernicus" and reporting nothing at all.
- */
+/** Follows `var(--token)` aliases; without it a site that only aliases its type reports none. */
 function resolveStack(stack, props) {
   const cleaned = String(stack || '').replace(/!important\s*$/i, '').trim();
 
@@ -326,13 +291,7 @@ function deriveTypeScale(sizes) {
   });
 }
 
-/**
- * Classify a family name.
- *
- * CamelCase names carry their own word boundaries — `GeistMono` is a monospace
- * face and `IBM Plex Sans` is a sans, but a `\b` boundary sees neither — so the
- * name is also tested with its case transitions turned into spaces.
- */
+/** Also tested with case transitions spaced out, since `\b` sees no boundary in `GeistMono`. */
 function classify(name) {
   const spaced = String(name).replace(/([a-z0-9])([A-Z])/g, '$1 $2');
   for (const candidate of [name, spaced]) {

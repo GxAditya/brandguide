@@ -1,22 +1,10 @@
 /**
- * Optional LLM interpretation layer.
+ * Optional LLM interpretation layer. TinyFish reads the web; it does not write.
  *
- * TinyFish reads the web; it does not write. This module adds a narrated layer
- * on top of the measured facts — a tone paragraph, message pillars, a
- * positioning line — when a model is configured.
- *
- * Two providers are supported, selected from `.env`: Google's Gemini API and any
- * OpenAI-compatible `/chat/completions` server. This module owns the prompt and
- * the rules; the protocol for each provider lives in `llm-gemini.js` and
- * `llm-openai.js`, and which one runs is decided by `llm-provider.js`.
- *
- * Three hard rules, enforced here rather than in a prompt comment:
- *   1. The model only ever sees a compact fact sheet, never raw HTML.
- *   2. Its output is parsed into a fixed shape and stored under `narrative`.
- *      It cannot overwrite `colors`, `typography`, `logos`, or any number.
- *   3. Any sentence it returns without a supporting source URL is dropped.
- *
- * With no key configured, everything else in BrandKit works unchanged.
+ * Three rules, enforced here rather than in a prompt comment: the model sees only a
+ * compact fact sheet, never raw HTML; its output is parsed into a fixed shape stored
+ * under `narrative`, where it cannot overwrite any measured value; and any sentence
+ * without a supporting source quote is dropped.
  */
 
 import { clampPages, pillarsForBudget } from '../lib/page-budget.js';
@@ -31,27 +19,24 @@ const TRANSPORTS = {
   'openai-compatible': callOpenAiCompatible,
 };
 
-export function llmConfigured() {
-  return resolveLlm().configured;
+export function llmConfigured(creds) {
+  return resolveLlm(creds).configured;
 }
 
 /**
- * What the layer is using, for the health endpoint and the startup banner.
- *
- * A provider that was explicitly requested but cannot work reports its `problem`
- * here rather than silently reporting "no LLM configured", because the difference
- * between "unset" and "set wrong" is the difference between nothing to do and a
- * typo to fix.
+ * What the layer is using, for the health endpoint and the startup banner. A
+ * provider requested but unable to work reports its `problem` rather than looking
+ * unconfigured: "unset" and "set wrong" need different fixes.
  */
-export function llmInfo() {
-  const resolved = resolveLlm();
+export function llmInfo(creds) {
+  const resolved = resolveLlm(creds);
 
   if (!resolved.configured) {
     return {
       enabled: false,
       provider: resolved.provider,
       ...(resolved.problem ? { problem: resolved.problem } : {}),
-      note: 'No LLM configured. Running the deterministic core only, which is the default and needs no key.',
+      note: 'No LLM key for this request. BrandKit runs its deterministic core, which needs no key.',
     };
   }
 
@@ -128,11 +113,8 @@ Return ONLY valid JSON with this exact shape:
 }`;
 
 /**
- * The budget is part of the instruction, not a filter applied afterwards.
- *
- * Asking for a specific number of pillars is how a requested guide length
- * reaches the model at all. Overshooting costs a little token spend; the
- * sanitiser drops anything unevidenced, so accuracy is unaffected either way.
+ * The budget is part of the instruction, not a filter applied afterwards. Overshooting
+ * costs a little token spend, never accuracy: the sanitiser drops the unevidenced.
  */
 function systemPrompt(pages, pillarCount) {
   return `${SYSTEM_RULES}
@@ -155,21 +137,20 @@ function extractJson(text) {
 }
 
 /**
- * Generate the narrative layer.
- *
  * @param {object} facts { identity, voice, messaging, colors, typography }
- * @param {{ pages?: number }} [opts] the requested guide length
+ * @param {{ pages?: number, creds?: object }} [opts] the requested guide length and
+ *   the caller's own LLM credentials
  * @returns {Promise<{ narrative: object|null, meta: object }>}
  */
 export async function narrate(facts, opts = {}) {
-  const config = resolveLlm();
+  const config = resolveLlm(opts.creds);
 
   if (!config.configured) {
     return {
       narrative: null,
       meta: {
         used: false,
-        reason: config.problem || 'no LLM configured',
+        reason: config.problem || 'no LLM key supplied for this request',
         provider: config.provider,
       },
     };
@@ -242,7 +223,7 @@ function sanitise(parsed, facts, pillarCount = 4) {
         .map((p) => {
           const claim = str(p?.claim, 240);
           const name = str(p?.name, 60);
-          // Rule 3: an evidence quote must actually exist in what we read.
+          // Rule 3: an evidence quote must exist in what we actually read.
           const evidence = str(p?.evidence, 240);
           const verified =
             evidence &&

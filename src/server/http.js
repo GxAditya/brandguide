@@ -1,15 +1,16 @@
 /**
  * A very small HTTP layer.
  *
- * Zero dependencies on purpose: this project should be runnable with `node
- * src/server/index.js` on a clean machine, with nothing to install and nothing
- * to audit. Node's built-in server plus a 60-line router is enough for four
- * endpoints and a static file.
+ * Zero dependencies on purpose: the project should run with `node
+ * src/server/index.js` on a clean machine, with nothing to install and nothing to
+ * audit. Node's built-in server plus a small router is enough.
  */
 
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
+
+import { readCreds, CRED_HEADER_LIST } from './creds.js';
 
 const MAX_BODY_BYTES = 256 * 1024;
 
@@ -26,7 +27,7 @@ const MIME = {
 };
 
 /**
- * @param {Array<{method:string, pattern:RegExp, handler:Function, cors?:boolean}>} routes
+ * @param {Array<{method:string, pattern:RegExp, handler:Function}>} routes
  * @param {{ staticRoot?: string, onError?: Function }} [opts]
  */
 export function createApp(routes, opts = {}) {
@@ -47,11 +48,11 @@ export function createApp(routes, opts = {}) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
 
-    // The API is public and read-only; allow any origin to call it.
-    if (url.pathname.startsWith('/api/') || req.method === 'OPTIONS') {
-      res.setHeader('Access-Control-Allow-Origin', '*');
+    // The API is public and read-only; allow any origin to call it. Credentials
+    // ride in headers, so those have to be named on the preflight too.
+    if (url.pathname.startsWith('/api/') || req.method === 'OPTIONS') {      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Headers', `Content-Type, ${CRED_HEADER_LIST}`);
     }
     if (req.method === 'OPTIONS') {
       res.writeHead(204).end();
@@ -75,6 +76,9 @@ export function createApp(routes, opts = {}) {
           params,
           query: Object.fromEntries(url.searchParams),
           body,
+          // Read once per request and handed to every handler: the key belongs to
+          // this call only, so nothing downstream can outlive it.
+          creds: readCreds(req),
         });
         if (result !== undefined && !res.writableEnded) sendJson(res, 200, result);
       } catch (err) {
@@ -84,14 +88,17 @@ export function createApp(routes, opts = {}) {
       return undefined;
     }
 
-    if (req.method === 'GET' && opts.staticRoot) {
+    // An unmatched path under /api/ is a mistyped endpoint, not a client route. The
+    // SPA fallback would answer it with the app shell and a 200, so a caller
+    // expecting JSON would never learn the route is gone.
+    if (req.method === 'GET' && opts.staticRoot && !url.pathname.startsWith('/api/')) {
       return serveStatic(opts.staticRoot, url.pathname, res);
     }
 
     return sendJson(res, 404, {
       error: {
         code: 'NOT_FOUND',
-        message: `No route for ${req.method} ${url.pathname}. See GET /api/v1/schema for the API surface.`,
+        message: `No route for ${req.method} ${url.pathname}. See GET /api/v1 for the API surface.`,
       },
     });
   });
@@ -149,11 +156,17 @@ function sendError(res, err) {
 
 function statusForCode(code) {
   switch (code) {
+    // A missing key is now the caller's own, sent per request, so it is their
+    // mistake to fix. It used to be a deployment fault and a 500.
     case 'MISSING_API_KEY':
+      return 400;
+    // A key that was sent and rejected is still our side talking to the wrong
+    // account, and a 4xx would tell the caller their URL or input is at fault.
     case 'INVALID_API_KEY':
+    // These are upstream failures: our key or the connection is broken, so *no*
+    // site can be read. Reporting them as 4xx would wrongly tell the caller to
+    // fix their input.
     case 'UNAUTHENTICATED':
-    // Our side is broken, not the caller's URL: that is a server fault, and a
-    // 4xx would wrongly tell them to fix their input.
     case 'HTTP_401':
     case 'HTTP_403':
     case 'NETWORK_ERROR':
@@ -182,7 +195,6 @@ function statusForCode(code) {
 
 async function serveStatic(root, pathname, res) {
   const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
-  // Contain the path inside the static root.
   const target = normalize(join(root, relative));
   if (!target.startsWith(root + sep) && target !== join(root, 'index.html')) {
     return sendJson(res, 403, { error: { code: 'FORBIDDEN', message: 'Path traversal is not allowed.' } });

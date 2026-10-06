@@ -1,14 +1,10 @@
 /**
  * Sentence-level voice analysis.
  *
- * Deterministic on purpose. Tone of voice is measurable from copy: sentence
- * length, reading grade, how often the brand says "you" versus "we", whether it
- * hedges, how much it contracts, whether it shouts. That is enough to describe
- * a voice without a model, and every number here can be checked against the
- * source page.
- *
- * If an LLM is configured, its narrative lands in a separate `narrative` field
- * and never overwrites these measurements.
+ * Deterministic on purpose: tone is measurable from copy (sentence length, reading
+ * grade, "you" versus "we", hedging, contractions), and every number here can be
+ * checked against the source page. An LLM's read lands in a separate `narrative`
+ * field and never overwrites these measurements.
  */
 
 /** Feature dictionaries. Deliberately small and English-centric. */
@@ -48,12 +44,15 @@ const BOILERPLATE_MARKERS = [
   'accept all', 'manage preferences', 'sign up', 'get started for free',
 ];
 
+/** Legal and cookie chrome, which measures as prose but says nothing about voice. */
+function isBoilerplate(sentence) {
+  const lower = sentence.toLowerCase();
+  return BOILERPLATE_MARKERS.some((marker) => lower.includes(marker));
+}
+
 const POSITIVE_FRAMING = /\b(free|no credit card|cancel anytime|included|unlimited|guarantee|love-it-or|try it)\b/i;
 
-/**
- * Strip HTML down to readable sentences.
- * @param {string} html cleaned semantic HTML from TinyFish Fetch
- */
+/** Strip HTML down to readable sentences. */
 export function htmlToText(html) {
   if (!html) return '';
   return html
@@ -86,33 +85,18 @@ export function splitSentences(text) {
     .split(/(?<=[.!?…])\s+|\n+/)
     .map((s) => s.trim())
     .filter((s) => s.length >= 28 && s.length <= 320)
-    // A "sentence" with no verb or no spaces is a label, not prose.
+    // A "sentence" with no spaces is a label, not prose.
     .filter((s) => /\s/.test(s) && /[a-z]/i.test(s))
     .filter((s) => (s.match(/[.!?…]/g) || []).length <= 2)
     .filter(isProse);
 
-  const boilerplate = new Set();
-  const out = [];
-  for (const sentence of candidates) {
-    const lower = sentence.toLowerCase();
-    if (BOILERPLATE_MARKERS.some((m) => lower.includes(m))) {
-      boilerplate.add(sentence);
-      continue;
-    }
-    out.push(sentence);
-  }
-
-  return [...new Set(out)];
+  return [...new Set(candidates.filter((s) => !isBoilerplate(s)))];
 }
 
 /**
- * Reject strings that a browser render stitched together rather than wrote.
- *
- * Linear's homepage carries a changelog feed. Stripping its tags produces
- * "andreas Feels like we could render sooner and load the rest in the
- * background." — a username welded to the start of a comment. Tag boundaries
- * always leave that trace: a capitalised word directly after a lowercase one,
- * with no punctuation between them.
+ * Reject strings a browser render stitched together rather than wrote. Stripping the
+ * tags off Linear's changelog feed yields "andreas Feels like we could render
+ * sooner"; tag boundaries always leave that capital-after-lowercase trace.
  */
 function isProse(sentence) {
   const trimmed = sentence.replace(/^["'“”‘’(\[*-]+/, '');
@@ -134,13 +118,7 @@ function isProse(sentence) {
   return true;
 }
 
-/**
- * Measure one page's copy.
- *
- * @param {string} html
- * @param {string} [url]
- * @returns {object} voice measurement
- */
+/** Measure one page's copy. */
 export function analyseCopy(html, url = null) {
   const text = htmlToText(html);
   const sentences = splitSentences(text);
@@ -155,7 +133,6 @@ export function analyseCopy(html, url = null) {
       wordCount: words.length,
       metrics: null,
       signalSentences: [],
-      boilerplate: [],
     };
   }
 
@@ -194,17 +171,16 @@ export function analyseCopy(html, url = null) {
     medianSentenceLength: median(lengths),
     longestSentence: Math.max(...lengths),
     readingGrade: Number(fleschKincaidGrade(wordsTotal, syllables, sentences.length).toFixed(1)),
-    // 0..1 normalised features. These are the comparable tone vector.
-    // Every rate below is per 1000 words, so a 40-word page and a 4000-word
-    // page are comparable — dividing raw counts by page length made short pages
-    // read as maximally hedged.
+    // 0..1 normalised features, the comparable tone vector. Every rate is per 1000
+    // words so a 40-word page and a 4000-word page stay comparable; dividing raw
+    // counts by page length made short pages read as maximally hedged.
     directness: round3(clamp01(1 - (mean(lengths) - 9) / 26)),
     formality: round3(clamp01(formal / (scale * 2 + 1))),
     enthusiasm: round3(clamp01(per1000(exclamations) / 2)),
     playfulness: round3(clamp01(casual / (scale + 1) + per1000(emoji) / 3)),
     warmth: round3(clamp01(counts.you / totalPronouns)),
-    // 60 hedges per 1000 words is heavily hedged; 0 is flat assertion. The scale
-    // has to be that wide because ordinary marketing copy already runs 20-40.
+    // 60 hedges per 1000 words is heavily hedged, 0 is flat assertion. The scale has
+    // to be that wide because ordinary marketing copy already runs 20-40.
     assertiveness: round3(clamp01(1 - hedgeRate / 60)),
     confidence: round3(clamp01(powerRate / (powerRate + hedgeRate + 6))),
     technicality: round3(clamp01((jargon / scale) / 8)),
@@ -227,16 +203,11 @@ export function analyseCopy(html, url = null) {
     metrics,
     pronouns: counts,
     signalSentences: pickSignalSentences(sentences, metrics, counts, url),
-    boilerplate: [],
     raw: { text: text.slice(0, 4000) },
   };
 }
 
-/**
- * Merge per-page measurements into one brand voice profile.
- *
- * @param {object[]} pageAnalyses
- */
+
 export function mergeVoice(pageAnalyses) {
   const usable = pageAnalyses.filter((p) => p.ok && p.sentenceCount >= 3);
   if (!usable.length) {
@@ -248,7 +219,6 @@ export function mergeVoice(pageAnalyses) {
       summary: 'Not enough prose was found to characterise the voice.',
       do: [],
       dont: [],
-      boilerplate: [],
     };
   }
 
@@ -301,7 +271,6 @@ export function mergeVoice(pageAnalyses) {
     do: buildDoList(usable, vector),
     dont: buildDontList(usable, vector),
     signalSentences: usable.flatMap((p) => p.signalSentences.slice(0, 4).map((s) => ({ ...s, page: s.page || p.url }))),
-    boilerplate: dedupeStrings(usable.flatMap((p) => p.boilerplate)).slice(0, 5),
     perPage: usable.map((p) => ({
       url: p.url,
       sentences: p.sentenceCount,
@@ -314,7 +283,7 @@ export function mergeVoice(pageAnalyses) {
 }
 
 /** Plain-language labels, so a marketer reads this without a stats degree. */
-export function describeVoice(v) {
+function describeVoice(v) {
   const out = [];
   const band = (value, low, high) => (value < low ? 0 : value > high ? 2 : 1);
 
@@ -480,7 +449,6 @@ function pickSignalSentences(sentences, metrics, pronouns, url) {
     if (HEDGES.some((h) => lower.includes(h))) score += 1;
     if (/\b(we|our|us)\b/.test(lower)) score += 2;
     if (POSITIVE_FRAMING.test(lower)) score += 2;
-    // Skip sentences that are mostly a number or a nav label.
     if (/\d{4,}/.test(sentence)) score -= 3;
     // `page` travels with the quote so guidance can cite where it came from.
     return { text: sentence, words, score, page: url };
@@ -500,8 +468,7 @@ function pickSignalSentences(sentences, metrics, pronouns, url) {
 
 // --- numeric helpers -------------------------------------------------------
 
-function countTerms(corpus, terms) {
-  let n = 0;
+function countTerms(corpus, terms) {  let n = 0;
   for (const term of terms) {
     if (term.includes(' ')) {
       n += (corpus.match(new RegExp(escapeRe(term), 'g')) || []).length;
@@ -581,10 +548,6 @@ function weightedMean(pages, key) {
 function weightedRatio(pages, key) {
   const values = pages.map((p) => p[key]).filter((v) => typeof v === 'number');
   return values.length ? Number(mean(values).toFixed(2)) : null;
-}
-
-function dedupeStrings(list) {
-  return [...new Set(list)];
 }
 
 function clamp01(n) {

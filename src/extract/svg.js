@@ -1,21 +1,10 @@
 /**
  * SVG logo source.
  *
- * A logo loaded through `<img src="…svg">` cannot inherit anything from the
- * page, and a large share of real brand SVGs are built to inherit:
- * `fill="currentColor"` is how most design systems ship a single logo file that
- * works on light and dark backgrounds. Loaded as an image, `currentColor`
- * resolves against the SVG's own default, so a cyan-and-white Tailwind mark
- * renders as a flat black shape. That is the whole bug: not a filter, not a bad
- * asset, just an image boundary doing what images do.
- *
- * The fix is to read the source and inline it, so `currentColor` resolves
- * against the page. That is the same trick the CSS reader already relies on,
- * since a stylesheet read back as text is how the palette works at all.
- *
- * Inlining remote markup is a script-injection risk, so everything is stripped
- * before it leaves this module: scripts, event handlers, external references
- * and anything else that can execute or phone home.
+ * A logo loaded through `<img>` cannot inherit from the page, and most design
+ * systems ship one `currentColor` file meant to work on light and dark. Read as text
+ * and inlined, it resolves against the page instead. Inlining remote markup is a
+ * script-injection risk, so everything executable or external is stripped here.
  */
 
 const MAX_SVG_CHARS = 120_000;
@@ -27,15 +16,11 @@ const FORBIDDEN_ELEMENTS = [
 ];
 
 /**
- * Strip everything executable or external from SVG source.
+ * Strip everything executable or external from SVG source. The root must be `<svg>`,
+ * not merely present somewhere in the input: a logo request the origin dislikes gets
+ * a 200 with an HTML page full of inline icons, and lifting one of those out would put
+ * an untrusted mark on the cover.
  *
- * The input must be an SVG *document*, not merely something containing an
- * `<svg>` element. Logo URLs fail over: a request that the origin does not like
- * gets a 200 with an HTML page instead of the asset, and that page is full of
- * inline icons. Lifting one of those out would put an unrelated, untrusted mark
- * on the cover under the brand's name. So the first real tag has to be `<svg>`.
- *
- * @param {string} source
  * @returns {string} safe markup, or '' if nothing usable survived
  */
 export function sanitiseSvg(source) {
@@ -63,22 +48,17 @@ export function sanitiseSvg(source) {
   markup = markup.replace(/\son[a-z]+\s*=\s*'[^']*'/gi, '');
   markup = markup.replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '');
 
-  /*
-   * External references. Only data URIs and bare fragment ids are kept, so a
-   * `<use href="https://elsewhere/x.svg#y">` cannot pull in a remote file.
-   */
+  // External references: only data URIs and bare fragment ids survive, so a
+  // `<use href="https://elsewhere/x.svg#y">` cannot pull in a remote file.
   markup = markup.replace(/\s(?:xlink:)?href\s*=\s*"([^"]*)"/gi, (match, value) => {
     const v = String(value).trim();
     if (v.startsWith('#') || /^data:image\//i.test(v)) return match;
     return ' href=""';
   });
 
-  /*
-   * Paint servers, which are a second way to reference something outside the
-   * file. `url(#gradient)` is a gradient defined in this same document and is
-   * fine; `url(https://elsewhere/g.svg#g)` is a remote fetch. A `fill` of
-   * `none` is the safe neutral.
-   */
+  // Paint servers are a second way to reference something outside the file.
+  // `url(#gradient)` is defined in this document and is fine; `url(https://…)`
+  // is a remote fetch, and `none` is the safe neutral.
   markup = markup.replace(
     /\s(fill|stroke|filter|mask|clip-path|marker-start|marker-mid|marker-end)\s*=\s*"url\(([^)]*)\)"(?:\s+([a-z-]+)\s*=\s*"([^"]*)")?/gi,
     (match, prop, ref) => {
@@ -93,13 +73,10 @@ export function sanitiseSvg(source) {
 
   if (!/<svg[\s>]/i.test(markup)) return '';
 
-  /*
-   * A viewBox is required, not merely a width. Without one the drawing has no
-   * coordinate system of its own, so the deck cannot scale it to the plate: a
-   * 16x16 favicon with width and height but no viewBox would be laid out at
-   * 16x16 inside a 200px box and read as a speck. `sanitiseSvg` guarantees the
-   * artwork can be fitted, which is what the renderer relies on.
-   */
+  // A viewBox is required, not merely a width. Without one the drawing has no
+  // coordinate system of its own, so the deck cannot scale it to the plate: a
+  // 16x16 favicon with width and height but no viewBox would lay out at 16x16
+  // inside a 200px box and read as a speck.
   if (!/\sviewBox\s*=\s*["'][^"']+["']/i.test(markup)) return '';
 
   return markup;
@@ -140,15 +117,7 @@ function relativeLuminance(r, g, b) {
   return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 }
 
-/**
- * Whether a mark is drawn light or dark, and whether it inherits its colour.
- *
- * This decides the plate it is shown on. A white mark on a white page is
- * invisible, which is the same class of bug as the greyscale one: correct
- * asset, wrong surface.
- *
- * @returns {{ tone: 'light'|'dark'|'inherit', swatches: number }}
- */
+/** Decides the plate a mark is shown on: a white mark on a white page is invisible. */
 export function svgTone(markup) {
   const text = String(markup || '');
 
@@ -176,10 +145,8 @@ export function svgTone(markup) {
 }
 
 /**
- * Read the source of the SVG candidates so the deck can inline them.
- *
- * Only SVGs are fetched: a raster logo needs no inlining, and an SVG only has
- * to be inlined if it actually inherits or would be invisible on a light plate.
+ * Read the source of the verified SVG candidates so the deck can inline them.
+ * Only SVGs are fetched: a raster logo needs no inlining.
  *
  * @param {import('../tinyfish/client.js').TinyFishClient} client
  * @param {object[]} candidates already verified, mutated in place
@@ -227,5 +194,3 @@ export async function attachSvgSource(client, candidates) {
 
   return { inlined };
 }
-
-export { FORBIDDEN_ELEMENTS, MAX_SVG_CHARS };

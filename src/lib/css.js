@@ -1,24 +1,13 @@
 /**
- * A small CSS reader.
- *
- * Real stylesheets are minified, use custom properties as aliases of other
- * custom properties, and hide brand tokens in `@media` blocks and Tailwind
- * theme objects. This module pulls out the structures that matter for brand
- * extraction, and nothing else.
+ * A small CSS reader. Real stylesheets are minified, alias custom properties
+ * through other custom properties, and hide tokens in `@media` blocks, so every
+ * reader below matches at any nesting depth rather than unwrapping the file.
  */
 
 /** Strip comments without breaking string literals. */
 export function stripComments(css) {
   return css.replace(/\/\*[\s\S]*?\*\//g, '');
 }
-
-/**
- * Note on at-rule nesting: every reader below matches at any nesting depth, so
- * declarations inside `@media`, `@supports` or `@layer` are found without
- * unwrapping the stylesheet. An earlier version spliced out conditional
- * wrappers, which was both unnecessary and lossy — brace-less at-rules such as
- * `@charset` have no block to skip, so it silently ate large parts of the file.
- */
 
 /**
  * All custom property declarations: `--name: value;`
@@ -53,7 +42,7 @@ export function resolveCustomProperty(props, name, maxDepth = 8) {
     const varMatch = current.match(/^\s*var\(\s*(--[\w-]+)\s*(?:,([^)]*))?\)/i);
     if (!varMatch) break;
     const next = varMatch[1].toLowerCase();
-    if (seen.has(next)) break; // circular
+    if (seen.has(next)) break;
     seen.add(next);
     const resolved = props.get(next);
     if (!resolved) {
@@ -117,30 +106,15 @@ export function splitFontStack(stack) {
 /** Every colour literal in the stylesheet with how many times it appears. */
 export function findColourOccurrences(css) {
   const counts = new Map();
-  const seen = new Map();
-
-  const record = (raw, weight = 1) => {
+  const record = (raw) => {
     const key = raw.trim().toLowerCase();
-    counts.set(key, (counts.get(key) || 0) + weight);
+    counts.set(key, (counts.get(key) || 0) + 1);
   };
 
-  // Hex colours are by far the most common in real stylesheets.
   for (const m of css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)) record(m[0]);
-
-  // rgb()/rgba() and hsl()/hsla() literals.
   for (const m of css.matchAll(/\brgba?\(\s*[\d.%,\s/]+\s*\)/gi)) record(m[0]);
   for (const m of css.matchAll(/\bhsla?\(\s*[\d.%,\s/deg-]+\s*\)/gi)) record(m[0]);
 
-  return { counts, seen };
-}
-
-/** Border radii, used to characterise the shape language of the brand. */
-export function parseRadii(css) {
-  const counts = new Map();
-  for (const m of css.matchAll(/border-radius\s*:\s*([^;{}]+)/gi)) {
-    const value = m[1].trim();
-    counts.set(value, (counts.get(value) || 0) + 1);
-  }
   return counts;
 }
 

@@ -4,11 +4,13 @@
  * Runs against mock providers rather than real ones, so it verifies the things a
  * user actually depends on when they drop a key in:
  *
- *   1. With no LLM configured, nothing breaks and nothing is called.
- *   2. With an LLM configured, the call *degrades* rather than fails when the
- *      provider rejects an optional field.
- *   3. The provider is chosen from `.env`, and the model named there is the model
- *      that gets called.
+ *   1. With no LLM key for the request, nothing breaks and nothing is called.
+ *   2. With a key, the call *degrades* rather than fails when the provider rejects
+ *      an optional field.
+ *   3. The provider is chosen from the credentials passed in, and the model named
+ *      there is the model that gets called.
+ *   4. Two callers in one process resolve independently, which the old
+ *      environment-variable model could not express.
  *
  * `response_format` is an OpenAI extension many compatible servers do not
  * implement, and `max_tokens` was renamed for OpenAI's reasoning models. A user
@@ -95,57 +97,21 @@ const FACTS = {
  * have every OpenAI-compatible test below silently switch providers, and the
  * failure would look like a bug in the code rather than in the test.
  */
-const LLM_ENV_KEYS = [
-  'LLM_PROVIDER',
-  'LLM_API_KEY',
-  'LLM_BASE_URL',
-  'LLM_MODEL',
-  'GEMINI_API_KEY',
-  'GEMINI_MODEL',
-  'GEMINI_BASE_URL',
-  'GEMINI_THINKING_LEVEL',
-  'GOOGLE_API_KEY',
-];
-
-function swapEnv(vars) {
-  const saved = {};
-  for (const key of LLM_ENV_KEYS) {
-    saved[key] = process.env[key];
-    delete process.env[key];
-  }
-  Object.assign(process.env, vars);
-  return () => {
-    for (const key of LLM_ENV_KEYS) {
-      if (key in saved) process.env[key] = saved[key];
-      else delete process.env[key];
-    }
-  };
-}
-
 /**
- * Run `fn` with the narration environment replaced, then put it back.
+ * Run `fn` with one caller's credentials, and hand those credentials to it.
  *
- * `fn` may be sync or async. When it hands back a promise the environment is held
- * until that promise settles, which is the whole difficulty: a `finally` that
- * runs the moment `fn()` returns its promise restores too early, and every test
- * that awaits inside `fn` then calls `narrate()` with no key configured and
- * passes or fails for entirely the wrong reason.
+ * Credentials are passed in rather than read from `process.env`, so these tests
+ * describe the same contract the server uses: one object, in, per request. It also
+ * removes the reason this helper existed at all. Swapping the environment needed
+ * save-and-restore around a callback that might return a promise, and the subtle
+ * part was holding the swap until that promise settled — an early restore made
+ * every test that awaited inside `fn` call `narrate()` with no key and pass for
+ * entirely the wrong reason. There is no state here to leak into a later test.
+ *
+ * `fn` may be sync or async; the return value is passed straight through.
  */
 function withEnv(vars, fn) {
-  const restore = swapEnv(vars);
-  let result;
-  try {
-    result = fn();
-  } catch (err) {
-    restore();
-    throw err;
-  }
-  if (result && typeof result.then === 'function') return result.then(
-    (value) => { restore(); return value; },
-    (err) => { restore(); throw err; },
-  );
-  restore();
-  return result;
+  return fn({ ...vars });
 }
 
 /** The same helper, named for the call sites that await it. */
@@ -153,29 +119,64 @@ function withEnvAsync(vars, fn) {
   return withEnv(vars, fn);
 }
 
-test('with no LLM configured, the layer is inert', async () => {
-  await withEnv({}, async () => {
-    assert.equal(llmConfigured(), false);
-    const info = llmInfo();
+test('with no LLM key for the request, the layer is inert', async () => {
+  await withEnv({}, async (creds) => {
+    assert.equal(llmConfigured(creds), false);
+    const info = llmInfo(creds);
     assert.equal(info.enabled, false);
-    assert.match(info.note, /No LLM configured/);
+    assert.match(info.note, /No LLM key/);
 
-    const result = await narrate(FACTS);
+    const result = await narrate(FACTS, { creds });
     assert.equal(result.narrative, null);
     assert.equal(result.meta.used, false);
-    assert.match(result.meta.reason, /no LLM configured/);
+    assert.match(result.meta.reason, /no LLM key supplied for this request/);
   });
 });
 
+/**
+ * The layer is per request, so two extractions in the same process can carry two
+ * different keys. Under the old environment-variable model this was impossible to
+ * express: the second call would silently reuse the first caller's key.
+ */
+test('one process resolves two callers independently', async () => {
+  const gemini = await startGeminiMock();
+  const openAi = await startMock();
+  try {
+    const withGemini = { GEMINI_API_KEY: 'gemini-key', GEMINI_BASE_URL: gemini.base };
+    const withOpenAi = {
+      LLM_PROVIDER: 'openai',
+      LLM_API_KEY: 'openai-key',
+      LLM_BASE_URL: openAi.base,
+      LLM_MODEL: 'test-model',
+    };
+
+    assert.equal(llmInfo(withGemini).provider, 'gemini');
+    assert.equal(llmInfo(withOpenAi).provider, 'openai-compatible');
+
+    // Run one to completion, then the other. The second must not inherit the
+    // first's provider, and the first must not have leaked into the second's key.
+    await narrate(FACTS, { creds: withGemini });
+    assert.equal(gemini.received.length, 1);
+    assert.equal(openAi.received.length, 0);
+
+    await narrate(FACTS, { creds: withOpenAi });
+    assert.equal(gemini.received.length, 1, 'the Gemini key must not fire a second time');
+    assert.equal(openAi.received.length, 1);
+  } finally {
+    await gemini.close();
+    await openAi.close();
+  }
+});
+
 test('a partially configured LLM is treated as not configured', async () => {
-  await withEnv({ LLM_API_KEY: 'k' }, () => {
-    assert.equal(llmConfigured(), false, 'all three variables are required together');
+  await withEnv({ LLM_API_KEY: 'k' }, async (creds) => {
+    assert.equal(llmConfigured(creds), false, 'all three variables are required together');
   });
-  await withEnv({ LLM_API_KEY: 'k', LLM_BASE_URL: 'http://x/v1' }, () => {
-    assert.equal(llmConfigured(), false);
+  await withEnv({ LLM_API_KEY: 'k', LLM_BASE_URL: 'http://x/v1' }, async (creds) => {
+    assert.equal(llmConfigured(creds), false);
   });
-  await withEnv({ LLM_API_KEY: 'k', LLM_BASE_URL: 'http://x/v1', LLM_MODEL: 'm' }, () => {
-    assert.equal(llmConfigured(), true);
+  await withEnv({ LLM_API_KEY: 'k', LLM_BASE_URL: 'http://x/v1', LLM_MODEL: 'm' }, async (creds) => {
+    assert.equal(llmConfigured(creds), true);
   });
 });
 
@@ -184,8 +185,8 @@ test('a full provider is called once and its narrative is sanitised', async () =
   try {
     await withEnv(
       { LLM_API_KEY: 'test-key', LLM_BASE_URL: mock.base, LLM_MODEL: 'test-model' },
-      async () => {
-        const result = await narrate(FACTS);
+      async (creds) => {
+        const result = await narrate(FACTS, { creds });
         assert.equal(result.meta.used, true);
         assert.equal(result.meta.model, 'test-model');
         assert.equal(mock.received.length, 1);
@@ -204,8 +205,8 @@ test('a provider that rejects response_format still works', async () => {
   try {
     await withEnv(
       { LLM_API_KEY: 'k', LLM_BASE_URL: mock.base, LLM_MODEL: 'm' },
-      async () => {
-        const result = await narrate(FACTS);
+      async (creds) => {
+        const result = await narrate(FACTS, { creds });
         assert.equal(result.meta.used, true, 'the call must degrade, not fail');
         assert.equal(mock.received.length, 2, 'one rejected attempt, one accepted');
         assert.ok(!('response_format' in mock.received[1].body));
@@ -224,8 +225,8 @@ test('a provider that rejects both max_tokens spellings still works', async () =
   try {
     await withEnv(
       { LLM_API_KEY: 'k', LLM_BASE_URL: mock.base, LLM_MODEL: 'm' },
-      async () => {
-        const result = await narrate(FACTS);
+      async (creds) => {
+        const result = await narrate(FACTS, { creds });
         assert.equal(result.meta.used, true);
         assert.equal(result.narrative.toneSummary, 'Measured from the copy.');
       },
@@ -240,8 +241,8 @@ test('a provider that rejects everything fails cleanly rather than throwing', as
   try {
     await withEnv(
       { LLM_API_KEY: 'k', LLM_BASE_URL: mock.base, LLM_MODEL: 'm' },
-      async () => {
-        const result = await narrate(FACTS);
+      async (creds) => {
+        const result = await narrate(FACTS, { creds });
         assert.equal(result.narrative, null);
         assert.equal(result.meta.used, false);
         assert.match(result.meta.reason, /HTTP 400/);
@@ -257,8 +258,8 @@ test('an unreachable provider fails cleanly rather than throwing', async () => {
   await withEnv(
     // Port 1 is reserved, so the connection is refused immediately.
     { LLM_API_KEY: 'k', LLM_BASE_URL: 'http://127.0.0.1:1/v1', LLM_MODEL: 'm' },
-    async () => {
-      const result = await narrate(FACTS);
+    async (creds) => {
+      const result = await narrate(FACTS, { creds });
       assert.equal(result.narrative, null);
       assert.equal(result.meta.used, false);
       assert.match(result.meta.reason, /LLM call failed/);
@@ -271,8 +272,8 @@ test('a provider returning non-JSON does not corrupt the guide', async () => {
   try {
     await withEnv(
       { LLM_API_KEY: 'k', LLM_BASE_URL: mock.base, LLM_MODEL: 'm' },
-      async () => {
-        const result = await narrate(FACTS);
+      async (creds) => {
+        const result = await narrate(FACTS, { creds });
         assert.equal(result.narrative, null, 'unparseable output is dropped, not half-applied');
         assert.match(result.meta.reason, /parseable JSON/);
       },
@@ -295,8 +296,8 @@ test('a pillar whose evidence is invented is dropped, not passed through', async
   try {
     await withEnv(
       { LLM_API_KEY: 'k', LLM_BASE_URL: mock.base, LLM_MODEL: 'm' },
-      async () => {
-        const result = await narrate(FACTS);
+      async (creds) => {
+        const result = await narrate(FACTS, { creds });
         const real = result.narrative.pillars.find((p) => p.name === 'Real');
         const invented = result.narrative.pillars.find((p) => p.name === 'Invented');
 
@@ -322,13 +323,13 @@ test('the requested page length reaches the model as a pillar count', async () =
   try {
     await withEnvAsync(
       { LLM_API_KEY: 'k', LLM_BASE_URL: mock.base, LLM_MODEL: 'm' },
-      async () => {
-        await narrate(FACTS, { pages: 8 });
+      async (creds) => {
+        await narrate(FACTS, { pages: 8, creds });
         const short = promptFor(8);
         assert.ok(short, 'the prompt must state the requested length');
         assert.equal(Number(short[1]), 8);
 
-        await narrate(FACTS, { pages: 22 });
+        await narrate(FACTS, { pages: 22, creds });
         const long = promptFor(22);
         assert.equal(Number(long[1]), 22);
         assert.ok(
@@ -337,7 +338,7 @@ test('the requested page length reaches the model as a pillar count', async () =
         );
 
         // Out-of-range input is clamped before it ever reaches the model.
-        await narrate(FACTS, { pages: 9999 });
+        await narrate(FACTS, { pages: 9999, creds });
         assert.equal(Number(promptFor(0)[1]), 24);
       },
     );
@@ -351,8 +352,8 @@ test('the budget is reported back so the deck can explain a shortfall', async ()
   try {
     await withEnv(
       { LLM_API_KEY: 'k', LLM_BASE_URL: mock.base, LLM_MODEL: 'm' },
-      async () => {
-        const result = await narrate(FACTS, { pages: 18 });
+      async (creds) => {
+        const result = await narrate(FACTS, { pages: 18, creds });
         assert.equal(result.meta.used, true);
         assert.equal(result.meta.pagesRequested, 18);
       },
@@ -377,11 +378,11 @@ test('a short budget truncates the pillars the model returns', async () => {
   try {
     await withEnvAsync(
       { LLM_API_KEY: 'k', LLM_BASE_URL: mock.base, LLM_MODEL: 'm' },
-      async () => {
-        const short = await narrate(FACTS, { pages: 6 });
+      async (creds) => {
+        const short = await narrate(FACTS, { pages: 6, creds });
         assert.equal(short.narrative.pillars.length, 3, 'a six-page guide takes three pillars');
 
-        const long = await narrate(FACTS, { pages: 22 });
+        const long = await narrate(FACTS, { pages: 22, creds });
         assert.equal(long.narrative.pillars.length, 5);
       },
     );
@@ -478,13 +479,13 @@ test('a Gemini key alone is enough, and defaults to the current flagship model',
   try {
     await withEnv(
       { GEMINI_API_KEY: 'test-key', GEMINI_BASE_URL: mock.base },
-      async () => {
-        const info = llmInfo();
+      async (creds) => {
+        const info = llmInfo(creds);
         assert.equal(info.enabled, true);
         assert.equal(info.provider, 'gemini');
         assert.equal(info.model, GEMINI_DEFAULT_MODEL, 'a key with no model still works');
 
-        const result = await narrate(FACTS);
+        const result = await narrate(FACTS, { creds });
         assert.equal(result.meta.used, true);
         assert.equal(result.meta.provider, 'gemini');
         assert.equal(result.meta.model, GEMINI_DEFAULT_MODEL);
@@ -497,17 +498,17 @@ test('a Gemini key alone is enough, and defaults to the current flagship model',
   }
 });
 
-test('GEMINI_MODEL in .env selects the model that gets called', async () => {
-  // The whole point of the layer being env-driven: switching models must not mean
-  // editing source. The id has to reach the wire, not just the status output.
+test('the named Gemini model is the model that gets called', async () => {
+  // Switching models must not mean editing source. The id has to reach the wire,
+  // not just the status output.
   const mock = await startGeminiMock();
   try {
     await withEnv(
       geminiEnv(mock, { GEMINI_MODEL: 'gemini-3.5-flash-lite' }),
-      async () => {
-        assert.equal(llmInfo().model, 'gemini-3.5-flash-lite');
+      async (creds) => {
+        assert.equal(llmInfo(creds).model, 'gemini-3.5-flash-lite');
 
-        const result = await narrate(FACTS);
+        const result = await narrate(FACTS, { creds });
         assert.equal(result.meta.model, 'gemini-3.5-flash-lite');
         assert.equal(mock.received[0].body.model, 'gemini-3.5-flash-lite');
       },
@@ -522,8 +523,8 @@ test('GOOGLE_API_KEY is accepted, because Google uses both spellings', async () 
   try {
     await withEnv(
       { GOOGLE_API_KEY: 'test-key', GEMINI_BASE_URL: mock.base, GEMINI_MODEL: 'gemini-3.8-flash' },
-      async () => {
-        const result = await narrate(FACTS);
+      async (creds) => {
+        const result = await narrate(FACTS, { creds });
         assert.equal(result.meta.used, true);
         assert.equal(result.meta.provider, 'gemini');
         assert.equal(mock.received[0].headers['x-goog-api-key'], 'test-key');
@@ -539,8 +540,8 @@ test('Gemini is called on its own endpoint with its own auth header', async () =
   // wrong produces a 404 that reads like a bad model id, so it is worth pinning.
   const mock = await startGeminiMock();
   try {
-    await withEnv(geminiEnv(mock), async () => {
-      await narrate(FACTS);
+    await withEnv(geminiEnv(mock), async (creds) => {
+      await narrate(FACTS, { creds });
 
       assert.equal(mock.received.length, 1);
       assert.equal(mock.received[0].url, '/v1beta/interactions');
@@ -557,8 +558,8 @@ test('Gemini is called on its own endpoint with its own auth header', async () =
 test('Gemini is asked for JSON by schema, not merely by prompt', async () => {
   const mock = await startGeminiMock();
   try {
-    await withEnv(geminiEnv(mock), async () => {
-      await narrate(FACTS);
+    await withEnv(geminiEnv(mock), async (creds) => {
+      await narrate(FACTS, { creds });
       const { response_format: format } = mock.received[0].body;
       assert.equal(format.mime_type, 'application/json');
       assert.ok(format.schema, 'a schema makes the shape a guarantee, not a request');
@@ -570,19 +571,19 @@ test('Gemini is asked for JSON by schema, not merely by prompt', async () => {
   }
 });
 
-test('thinking is turned down by default and can be raised from .env', async () => {
+test('thinking is turned down by default and can be raised by the caller', async () => {
   // Gemini 3 reasons before answering and those tokens come out of the same output
   // budget, so an explicit low level is what keeps narration cheap and uncut.
   const mock = await startGeminiMock();
   try {
-    await withEnvAsync(geminiEnv(mock), async () => {
-      await narrate(FACTS);
+    await withEnvAsync(geminiEnv(mock), async (creds) => {
+      await narrate(FACTS, { creds });
       assert.equal(mock.received.at(-1).body.generation_config.thinking_level, 'low');
-      assert.equal(llmInfo().thinkingLevel, 'low');
+      assert.equal(llmInfo(creds).thinkingLevel, 'low');
     });
 
-    await withEnvAsync(geminiEnv(mock, { GEMINI_THINKING_LEVEL: 'high' }), async () => {
-      await narrate(FACTS);
+    await withEnvAsync(geminiEnv(mock, { GEMINI_THINKING_LEVEL: 'high' }), async (creds) => {
+      await narrate(FACTS, { creds });
       assert.equal(mock.received.at(-1).body.generation_config.thinking_level, 'high');
     });
   } finally {
@@ -593,8 +594,8 @@ test('thinking is turned down by default and can be raised from .env', async () 
 test('a Gemini endpoint that rejects the structured-output field still works', async () => {
   const mock = await startGeminiMock({ reject: (b) => 'response_format' in b });
   try {
-    await withEnv(geminiEnv(mock), async () => {
-      const result = await narrate(FACTS);
+    await withEnv(geminiEnv(mock), async (creds) => {
+      const result = await narrate(FACTS, { creds });
       assert.equal(result.meta.used, true, 'the call must degrade, not fail');
       assert.equal(mock.received.length, 2, 'one rejected attempt, one accepted');
       assert.ok(!('response_format' in mock.received[1].body));
@@ -610,8 +611,8 @@ test('a Gemini endpoint that rejects every optional field still works', async ()
     reject: (b) => 'response_format' in b || 'generation_config' in b,
   });
   try {
-    await withEnv(geminiEnv(mock), async () => {
-      const result = await narrate(FACTS);
+    await withEnv(geminiEnv(mock), async (creds) => {
+      const result = await narrate(FACTS, { creds });
       assert.equal(result.meta.used, true);
       assert.equal(mock.received.length, 4, 'drops the schema, then the thinking level');
       const last = mock.received.at(-1).body;
@@ -628,8 +629,8 @@ test('an unknown Gemini model id names the models that do exist', async () => {
   // you which string was wrong, so the reason has to.
   const mock = await startGeminiMock({ failStatus: 404 });
   try {
-    await withEnv(geminiEnv(mock, { GEMINI_MODEL: 'gemini-3.8-flsh' }), async () => {
-      const result = await narrate(FACTS);
+    await withEnv(geminiEnv(mock, { GEMINI_MODEL: 'gemini-3.8-flsh' }), async (creds) => {
+      const result = await narrate(FACTS, { creds });
       assert.equal(result.narrative, null);
       assert.equal(result.meta.used, false);
       assert.match(result.meta.reason, /HTTP 404/);
@@ -643,8 +644,8 @@ test('an unknown Gemini model id names the models that do exist', async () => {
 test('a Gemini reply with no text steps is dropped rather than half-applied', async () => {
   const mock = await startGeminiMock({ reply: '' });
   try {
-    await withEnv(geminiEnv(mock), async () => {
-      const result = await narrate(FACTS);
+    await withEnv(geminiEnv(mock), async (creds) => {
+      const result = await narrate(FACTS, { creds });
       assert.equal(result.narrative, null);
       assert.match(result.meta.reason, /parseable JSON/);
     });
@@ -658,10 +659,10 @@ test('a Gemini reply with no text steps is dropped rather than half-applied', as
 // ---------------------------------------------------------------------------
 
 test('LLM_PROVIDER=gemini without a key explains itself instead of staying quiet', async () => {
-  await withEnv({ LLM_PROVIDER: 'gemini' }, () => {
-    assert.equal(llmConfigured(), false);
+  await withEnv({ LLM_PROVIDER: 'gemini' }, async (creds) => {
+    assert.equal(llmConfigured(creds), false);
 
-    const info = llmInfo();
+    const info = llmInfo(creds);
     assert.equal(info.enabled, false);
     assert.equal(info.provider, 'gemini');
     assert.match(info.problem, /GEMINI_API_KEY/);
@@ -672,14 +673,14 @@ test('LLM_PROVIDER=gemini without a key explains itself instead of staying quiet
 test('an unrecognised LLM_PROVIDER is an error naming the two valid values', async () => {
   // Silently falling back would produce a guide that never gets narrated and a
   // config file that looks correct.
-  await withEnv({ LLM_PROVIDER: 'anthropic' }, async () => {
-    const info = llmInfo();
+  await withEnv({ LLM_PROVIDER: 'anthropic' }, async (creds) => {
+    const info = llmInfo(creds);
     assert.equal(info.enabled, false);
     assert.match(info.problem, /LLM_PROVIDER/);
     assert.match(info.problem, /gemini/);
     assert.match(info.problem, /openai/);
 
-    const result = await narrate(FACTS);
+    const result = await narrate(FACTS, { creds });
     assert.equal(result.narrative, null);
     assert.match(result.meta.reason, /LLM_PROVIDER/);
   });
@@ -688,14 +689,14 @@ test('an unrecognised LLM_PROVIDER is an error naming the two valid values', asy
 test('a complete LLM_ trio outranks a leftover Gemini key', async () => {
   // Three agreeing variables are a deliberate configuration; a single key may
   // just be left over from something else. LLM_PROVIDER settles it either way.
-  await withEnv({ LLM_API_KEY: 'k', LLM_BASE_URL: 'http://x/v1', LLM_MODEL: 'm', GEMINI_API_KEY: 'g' }, () => {
-    assert.equal(llmInfo().provider, 'openai-compatible');
+  await withEnv({ LLM_API_KEY: 'k', LLM_BASE_URL: 'http://x/v1', LLM_MODEL: 'm', GEMINI_API_KEY: 'g' }, async (creds) => {
+    assert.equal(llmInfo(creds).provider, 'openai-compatible');
   });
 
   await withEnv(
     { LLM_API_KEY: 'k', LLM_BASE_URL: 'http://x/v1', LLM_MODEL: 'm', GEMINI_API_KEY: 'g', LLM_PROVIDER: 'gemini' },
-    () => {
-      assert.equal(llmInfo().provider, 'gemini');
+    async (creds) => {
+      assert.equal(llmInfo(creds).provider, 'gemini');
     },
   );
 });
@@ -705,8 +706,8 @@ test('LLM_MODEL names the model even on Gemini', async () => {
   try {
     await withEnv(
       { GEMINI_API_KEY: 'k', GEMINI_BASE_URL: mock.base, LLM_MODEL: 'gemini-3.7-flash' },
-      async () => {
-        await narrate(FACTS);
+      async (creds) => {
+        await narrate(FACTS, { creds });
         assert.equal(mock.received[0].body.model, 'gemini-3.7-flash');
       },
     );
@@ -716,18 +717,18 @@ test('LLM_MODEL names the model even on Gemini', async () => {
 });
 
 test('an incomplete OpenAI-compatible trio does not half-enable the layer', async () => {
-  await withEnv({ LLM_PROVIDER: 'openai', LLM_API_KEY: 'k' }, () => {
-    const info = llmInfo();
+  await withEnv({ LLM_PROVIDER: 'openai', LLM_API_KEY: 'k' }, async (creds) => {
+    const info = llmInfo(creds);
     assert.equal(info.enabled, false);
     assert.match(info.problem, /LLM_BASE_URL/);
     assert.match(info.problem, /LLM_MODEL/);
   });
 });
 
-test('provider resolution is a pure function of the environment', async () => {
-  // resolveLlm takes its env as an argument precisely so this is checkable
-  // without mutating process.env, which matters because every other test here
-  // depends on process.env being predictable.
+test('provider resolution is a pure function of its input', async () => {
+  // resolveLlm takes the credentials as an argument, so resolution is checkable
+  // with no global state at all. Nothing here mutates process.env, and nothing
+  // could: the function has no way to reach it.
   assert.equal(resolveLlm({}).configured, false);
   assert.equal(resolveLlm({ GEMINI_API_KEY: 'k' }).provider, 'gemini');
   assert.equal(resolveLlm({ GEMINI_API_KEY: 'k' }).model, GEMINI_DEFAULT_MODEL);
