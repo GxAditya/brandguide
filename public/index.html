@@ -98,10 +98,13 @@
     <div class="field">
       <label class="field-label" for="llm-provider">Narration model</label>
       <select id="llm-provider" name="llmProvider" class="field-input"></select>
-      <p class="field-help">
+      <p class="field-help" id="llm-provider-help">
         Optional. A model writes the tone paragraph and message pillars from the
         measured facts. It cannot change a colour, a typeface or a logo. Leave this
         off and you get the seven measured pages, which is the recommended mode.
+      </p>
+      <p class="field-tags" id="llm-provider-tags" hidden>
+        <span class="tag tag-free">free tier</span>
       </p>
     </div>
 
@@ -110,23 +113,27 @@
       <input id="llm-key" name="llmKey" type="password" spellcheck="false"
         autocapitalize="off" autocorrect="off" data-1p-ignore>
       <p class="field-help" id="llm-key-help">A key for the provider above.</p>
+      <a class="field-link" id="llm-key-link" href="https://aistudio.google.com/apikey"
+        target="_blank" rel="noopener noreferrer" hidden>Get a key</a>
     </div>
 
     <div class="field" id="llm-base-field" hidden>
       <label class="field-label" for="llm-base">Server base URL</label>
-      <input id="llm-base" name="llmBase" type="url" placeholder="https://api.openai.com/v1"
-        spellcheck="false" autocapitalize="off" autocorrect="off">
-      <p class="field-help">The root that <code>/chat/completions</code> is appended to.</p>
+      <input id="llm-base" name="llmBase" type="url" placeholder="https://api.example.com/v1"
+        spellcheck="false" autocapitalize="off" autocorrect="off" readonly>
+      <p class="field-help" id="llm-base-help">Filled in from the provider above.</p>
     </div>
 
     <div class="field" id="llm-model-field" hidden>
       <label class="field-label" for="llm-model">Model</label>
-      <input id="llm-model" name="llmModel" type="text" placeholder="gemini-3.8-flash"
-        spellcheck="false" autocapitalize="off" autocorrect="off">
-      <p class="field-help">Optional. Left blank, the current Gemini flagship is used.</p>
+      <select id="llm-model" name="llmModel" class="field-input"></select>
+      <p class="field-help" id="llm-model-help">
+        Optional. Left on automatic, whichever model has capacity is used.
+      </p>
     </div>
 
     <p class="field-error" id="settings-error" role="alert" hidden></p>
+    <p class="field-ok" id="settings-ok" role="status" hidden></p>
 
     <p class="sheet-note" id="settings-storage">
       Keys are kept in this browser and sent with each request. The server holds
@@ -137,7 +144,7 @@
   <footer class="sheet-foot">
     <button type="button" class="btn-ghost btn-danger" id="settings-clear">Forget keys</button>
     <div class="sheet-actions">
-      <button type="button" class="btn-ghost" id="settings-cancel">Cancel</button>
+      <button type="button" class="btn-ghost" id="settings-test">Test</button>
       <button type="button" class="btn-primary" id="settings-save">Save</button>
     </div>
   </footer>

@@ -22,6 +22,12 @@ export const CRED_HEADERS = {
   llmKey: 'x-brandkit-llm-key',
   llmBase: 'x-brandkit-llm-base',
   llmModel: 'x-brandkit-llm-model',
+  /**
+   * A preset id from llm-presets.js. This is what makes a free key usable by
+   * someone who does not know what a base URL is: the preset supplies it, and its
+   * first listed model when none was named.
+   */
+  llmPreset: 'x-brandkit-llm-preset',
 };
 
 /** Every name above, for the CORS preflight. */
@@ -60,12 +66,13 @@ export function readCreds(req) {
   const key = bounded(header(req, CRED_HEADERS.llmKey), MAX_KEY);
   const base = bounded(header(req, CRED_HEADERS.llmBase), MAX_URL);
   const model = bounded(header(req, CRED_HEADERS.llmModel), MAX_MODEL);
+  const preset = bounded(header(req, CRED_HEADERS.llmPreset), 32).toLowerCase();
 
   return {
     tinyfishKey,
     hasTinyfishKey: Boolean(tinyfishKey),
     hasLlmKey: Boolean(key),
-    llm: llmCredential({ provider, key, base, model }),
+    llm: llmCredential({ provider, key, base, model, preset }),
   };
 }
 
@@ -78,13 +85,25 @@ export function readCreds(req) {
  * already reports that state by name, and inventing a second opinion here would
  * give the same mistake two different messages.
  */
-function llmCredential({ provider, key, base, model }) {
+function llmCredential({ provider, key, base, model, preset }) {
   if (!key) return {};
 
-  if (provider === 'openai' || provider === 'openai-compatible') {
+  // A preset names the provider too, so picking one is enough. `gemini` is the one
+  // preset whose transport is not OpenAI-compatible, and it is checked first because
+  // its model table is different.
+  if (provider === 'gemini' || (preset === 'gemini' && provider !== 'openai' && provider !== 'openai-compatible')) {
     return {
-      LLM_PROVIDER: 'openai-compatible',
+      GEMINI_API_KEY: key,
+      ...(preset ? { LLM_PRESET: preset } : {}),
+      ...(model ? { GEMINI_MODEL: model } : {}),
+    };
+  }
+
+  if (provider === 'openai' || provider === 'openai-compatible' || preset) {
+    return {
+      ...(provider ? { LLM_PROVIDER: 'openai-compatible' } : {}),
       LLM_API_KEY: key,
+      ...(preset ? { LLM_PRESET: preset } : {}),
       ...(base ? { LLM_BASE_URL: base } : {}),
       ...(model ? { LLM_MODEL: model } : {}),
     };
@@ -95,6 +114,8 @@ function llmCredential({ provider, key, base, model }) {
     return { LLM_PROVIDER: provider, LLM_API_KEY: key, ...(base ? { LLM_BASE_URL: base } : {}) };
   }
 
+  // A bare key with no preset means Gemini, which is the single-field setup worth
+  // supporting in a form.
   return {
     GEMINI_API_KEY: key,
     ...(model ? { GEMINI_MODEL: model } : {}),

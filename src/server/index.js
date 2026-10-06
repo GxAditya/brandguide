@@ -25,6 +25,10 @@ import { compareBrands } from '../pipeline/compare.js';
 import { render, FORMATS } from '../export/index.js';
 import { DEPTHS } from '../pipeline/collect.js';
 import { clampPages } from '../lib/page-budget.js';
+import { resolveLlm } from '../pipeline/llm-provider.js';
+import { callGemini } from '../pipeline/llm-gemini.js';
+import { callOpenAiCompatible } from '../pipeline/llm-openai.js';
+import { PRESETS } from '../pipeline/llm-presets.js';
 import { streamGuide } from './stream.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -34,6 +38,11 @@ const PORT = Number(process.env.PORT || 3000);
 /** One client per request, so each response carries its own provenance log. */
 function newClient(creds) {
   return new TinyFishClient({ apiKey: creds.tinyfishKey });
+}
+
+/** The transport for whichever provider the caller resolved to. */
+function callLlm(prompt, config) {
+  return config.provider === 'gemini' ? callGemini(prompt, config) : callOpenAiCompatible(prompt, config);
 }
 
 /** Shared request parsing so both endpoints behave identically. */
@@ -201,17 +210,69 @@ const routes = [
     pattern: /^\/api\/v1\/health$/,
     handler: async () => ({
       status: 'ok',
-      version: '1.0.0',
+      version: '1.1.0',
       uptimeSeconds: Math.round(process.uptime()),
       auth: 'byok',
       credentials: {
         transport: 'headers',
         tinyfish: 'x-brandkit-tinyfish-key',
-        llm: ['x-brandkit-llm-provider', 'x-brandkit-llm-key', 'x-brandkit-llm-base', 'x-brandkit-llm-model'],
+        llm: [
+          'x-brandkit-llm-preset',
+          'x-brandkit-llm-provider',
+          'x-brandkit-llm-key',
+          'x-brandkit-llm-base',
+          'x-brandkit-llm-model',
+        ],
       },
-      endpoints: ['/api/v1/brand-guide', '/api/v1/compare', '/api/v1/stream'],
+      endpoints: ['/api/v1/brand-guide', '/api/v1/compare', '/api/v1/stream', '/api/v1/llm-check'],
       note: 'This server holds no keys and makes no upstream call here. Send your own key with a request.',
     }),
+  },
+
+  {
+    /**
+     * Check a narration credential with one tiny call, so Settings can say whether a
+     * key works before a 25-second crawl is spent finding out.
+     *
+     * Deliberately the cheapest possible request: one short prompt, the smallest
+     * model the preset offers. It answers "is this key good and does this provider
+     * have capacity right now", which is the question a person opening Settings has.
+     * Anything richer would cost the caller quota to answer it.
+     */
+    method: 'POST',
+    pattern: /^\/api\/v1\/llm-check$/,
+    handler: async ({ body, creds }) => {
+      const config = resolveLlm(creds.llm);
+      if (!config.configured) {
+        return { ok: false, reason: config.problem || 'no narration key supplied' };
+      }
+
+      const started = Date.now();
+      try {
+        const text = await callLlm(
+          { system: 'Reply with the single word OK.', user: 'Reply with the single word OK.' },
+          config,
+        );
+        return {
+          ok: Boolean(text),
+          provider: config.provider,
+          model: config.model,
+          endpoint: config.endpoint,
+          latencyMs: Date.now() - started,
+          ...(text ? {} : { reason: 'The provider answered with no text.' }),
+        };
+      } catch (err) {
+        // The transport's own message already names the model, the limit and the fix.
+        return {
+          ok: false,
+          provider: config.provider,
+          model: config.model,
+          endpoint: config.endpoint,
+          latencyMs: Date.now() - started,
+          reason: err.message,
+        };
+      }
+    },
   },
 
   {
@@ -224,7 +285,27 @@ const routes = [
         mode: 'byok',
         note: 'No key is stored. Send your own per request in headers; see /api/v1/health for the names.',
         required: ['x-brandkit-tinyfish-key'],
-        optional: ['x-brandkit-llm-provider', 'x-brandkit-llm-key', 'x-brandkit-llm-base', 'x-brandkit-llm-model'],
+        optional: ['x-brandkit-llm-preset', 'x-brandkit-llm-provider', 'x-brandkit-llm-key', 'x-brandkit-llm-base', 'x-brandkit-llm-model'],
+      },
+      /**
+       * The preset catalogue, so the Settings panel and any other client read the same
+       * list rather than each hard-coding a base URL. Free tiers come first: they are
+       * the ones a visitor can actually use without a payment method.
+       */
+      presets: PRESETS.map((p) => ({
+        id: p.id,
+        label: p.label,
+        transport: p.transport,
+        free: Boolean(p.free),
+        baseUrl: p.baseUrl || null,
+        hint: p.hint,
+        keyUrl: p.keyUrl || null,
+        models: p.models || [],
+      })),
+      llmCheck: {
+        method: 'POST',
+        path: '/api/v1/llm-check',
+        note: 'Sends one minimal prompt with your narration headers and reports whether the key works. Costs one request from your quota.',
       },
       endpoints: {
         'POST /api/v1/brand-guide': 'Complete brand guide: logo, palette, typography, voice, messaging.',

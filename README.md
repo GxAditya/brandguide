@@ -52,9 +52,10 @@ same instance spend their own quota and there is nothing stored to leak or rotat
 | --- | --- | --- |
 | `X-BrandKit-Tinyfish-Key` | **yes** | Search and Fetch. Nothing works without it. |
 | `X-BrandKit-Llm-Key` | no | Narration key. Omitted means measured pages only. |
-| `X-BrandKit-Llm-Provider` | no | `gemini` or `openai`. A bare key means Gemini. |
-| `X-BrandKit-Llm-Base` | no | Base URL for an OpenAI-compatible server. |
-| `X-BrandKit-Llm-Model` | no | Model id. Defaults to the current Gemini flagship. |
+| `X-BrandKit-Llm-Preset` | no | A provider id. Supplies the base URL and a working model. |
+| `X-BrandKit-Llm-Provider` | no | `gemini` or `openai`, if not using a preset. |
+| `X-BrandKit-Llm-Base` | no | Base URL. Only needed without a preset that has one. |
+| `X-BrandKit-Llm-Model` | no | Model id. Optional: another is tried when this one is unavailable. |
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/brand-guide \
@@ -74,17 +75,42 @@ node src/cli.js guide linear --key sk-tinyfish-...
 node src/cli.js guide linear --key sk-... --llm-key AIza...   # narrate with Gemini
 ```
 
-`LLM_PROVIDER` is `gemini` or `openai`; without it a complete OpenAI-compatible
-trio wins over a bare Gemini key.
+### Narration providers
 
-**Google Gemini** is the shortest configuration — one key field, since a key with
-no provider selected means Gemini:
+Picking a provider in Settings supplies its base URL and a model known to be live,
+so **a key is enough**. `POST /api/v1/llm-check` proves it with one minimal request
+before you spend a crawl on it.
+
+| Preset | Tier | Notes |
+| --- | --- | --- |
+| `gemini` | free | **20 requests/day per model.** Narration moves to another model when one is full. |
+| `openrouter` | free | 16 free models, all `:free`-suffixed. None of them are Gemini. |
+| `groq` | free | Very fast developer tier. |
+| `nvidia` | free | Free hosted models. Retired ones answer `410 Gone`. |
+| `cerebras` | free | Free developer tier. |
+| `openai`, `mistral`, `deepseek` | paid | |
+| `custom` | — | Any OpenAI-compatible `/chat/completions` server. |
+
+Two ladders handle the free tiers, because a failure there means one of two very
+different things:
+
+- **Refused** (400, 404, 422) — an unsupported field or a model id that is gone, so
+  the same call is retried with less on it.
+- **Unavailable** (429, 5xx) — trying a smaller body would be pointless *and would
+  spend quota to prove it*, so the identical request is retried with backoff, and on
+  Gemini the ladder moves to a **different model**.
+
+Conflating those two was a real bug. A 20-per-day quota returning 429 once used to
+mean the request had already been tried four times, all refused, and the guide came
+back with no explanation. Now a daily limit says what it is and when it resets, and a
+model at capacity is not the end of the run.
 
 ```bash
-# Settings → Narration model → Google Gemini
-key:    AIza...
-model:  gemini-3.8-flash   # optional; this is the default
+node src/cli.js guide linear --key sk-tinyfish-... --llm-preset openrouter --llm-key sk-or-...
 ```
+
+`GET /api/v1` returns the preset catalogue, which is the authoritative copy of that
+table.
 
 Gemini is called on its own API, not the OpenAI shape, because Google does not
 serve `/chat/completions` on its own domain. The request goes to
@@ -105,19 +131,32 @@ unrecognised id is reported by name rather than as a bare 404.
 | --- | --- | --- |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
 | Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
-| OpenRouter | `https://openrouter.ai/api/v1` | `google/gemini-flash-1.5` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `nvidia/nemotron-3-super-120b-a12b:free` |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| NVIDIA NIM | `https://integrate.api.nvidia.com/v1` | `nvidia/llama-3.1-nemotron-ultra-253b-v1` |
+| Cerebras | `https://api.cerebras.ai/v1` | `llama3.1-8b` |
 | Together | `https://api.together.xyz/v1` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 | Mistral | `https://api.mistral.ai/v1` | `mistral-small-latest` |
 | xAI | `https://api.x.ai/v1` | `grok-2-latest` |
-| Cerebras | `https://api.cerebras.ai/v1` | `llama3.1-8b` |
 | Gemini (compatibility surface) | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-3.8-flash` |
 | Ollama (local, no key) | `http://localhost:11434/v1` | `llama3.2` |
 
-The call is a standard Chat Completions request. `response_format: json_object`
-and `max_tokens` are sent first and then dropped if the provider rejects them,
-so a server that implements only part of the OpenAI shape still works. That
-fallback is covered by `test/llm.test.js` against a mock provider.
+Use `custom` for anything not in the preset list. The model lists above are
+snapshots, not a promise: providers retire ids, and a retired one answers `404` or
+`410 Gone` by name rather than as a bare status.
+
+The call is a standard Chat Completions request. `response_format: json_object`,
+`max_tokens` and `temperature` are sent first and then dropped, one at a time, if the
+provider refuses them, so a server implementing only part of the OpenAI shape still
+works. That ladder is covered by `test/llm.test.js` and `test/llm-fallbacks.test.js`
+against mock providers.
+
+Note the Gemini default is `gemini-3.1-flash-lite`, not the 3.8 flagship. Measured on
+the free tier, the flagship answers a bare prompt but returns `503 high demand` for
+structured requests — the exact shape this app sends — so a user who pasted only a key
+would have got nothing on their first run. The flagship is one dropdown away, and the
+fallback ladder catches anyone who picks it anyway.
 
 Then:
 

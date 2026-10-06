@@ -246,7 +246,9 @@ test('a provider that rejects everything fails cleanly rather than throwing', as
         assert.equal(result.narrative, null);
         assert.equal(result.meta.used, false);
         assert.match(result.meta.reason, /HTTP 400/);
-        assert.equal(mock.received.length, 4, 'tries every body shape, then stops');
+        // Every rung of the ladder, then stop. The count is the ladder's length, which
+        // is asserted here so a rung cannot be added or removed without this moving.
+        assert.equal(mock.received.length, 6, 'tries every body shape, then stops');
       },
     );
   } finally {
@@ -658,14 +660,16 @@ test('a Gemini reply with no text steps is dropped rather than half-applied', as
 // Provider selection
 // ---------------------------------------------------------------------------
 
-test('LLM_PROVIDER=gemini without a key explains itself instead of staying quiet', async () => {
+test('asking for Gemini without a key explains itself instead of staying quiet', async () => {
   await withEnv({ LLM_PROVIDER: 'gemini' }, async (creds) => {
     assert.equal(llmConfigured(creds), false);
 
     const info = llmInfo(creds);
     assert.equal(info.enabled, false);
     assert.equal(info.provider, 'gemini');
-    assert.match(info.problem, /GEMINI_API_KEY/);
+    // Plain language and a place to get one. The old message named an environment
+    // variable that no longer exists anywhere in this app.
+    assert.match(info.problem, /no key/i);
     assert.match(info.problem, /aistudio\.google\.com/);
   });
 });
@@ -720,9 +724,55 @@ test('an incomplete OpenAI-compatible trio does not half-enable the layer', asyn
   await withEnv({ LLM_PROVIDER: 'openai', LLM_API_KEY: 'k' }, async (creds) => {
     const info = llmInfo(creds);
     assert.equal(info.enabled, false);
-    assert.match(info.problem, /LLM_BASE_URL/);
-    assert.match(info.problem, /LLM_MODEL/);
+    // Plain language now rather than variable names: the reader of this message is
+    // looking at a form, not at a credential object.
+    assert.match(info.problem, /base URL/);
+    assert.match(info.problem, /model/);
   });
+});
+
+test('a preset supplies the base URL and a model, so a key alone is enough', async () => {
+  // The whole point of presets. Someone who has never heard the phrase "base URL"
+  // should be able to add free narration by pasting a key and picking a name.
+  for (const preset of ['openrouter', 'groq', 'nvidia', 'cerebras']) {
+    const resolved = resolveLlm({ LLM_PRESET: preset, LLM_API_KEY: 'k' });
+    assert.equal(resolved.configured, true, `${preset} should configure from a key alone`);
+    assert.equal(resolved.provider, 'openai-compatible');
+    assert.ok(resolved.baseUrl.startsWith('https://'), `${preset} should carry an https base URL`);
+    assert.ok(resolved.model.length > 0, `${preset} should carry a default model`);
+    assert.equal(resolved.endpoint, `${resolved.baseUrl}/chat/completions`);
+    // llmInfo is what the settings panel reads, so it has to agree.
+    assert.equal(llmInfo({ LLM_PRESET: preset, LLM_API_KEY: 'k' }).enabled, true);
+  }
+});
+
+test('a preset cannot half-configure: custom still needs a base URL', async () => {
+  // `custom` is the one preset with no URL of its own, so it is the one that can
+  // still arrive incomplete. It must not silently configure.
+  const info = llmInfo({ LLM_PRESET: 'custom', LLM_API_KEY: 'k' });
+  assert.equal(info.enabled, false);
+  assert.match(info.problem, /base URL/);
+});
+
+test('a preset model can be overridden without losing the base URL', async () => {
+  const resolved = resolveLlm({
+    LLM_PRESET: 'openrouter',
+    LLM_API_KEY: 'k',
+    LLM_MODEL: 'some/other-model:free',
+  });
+  assert.equal(resolved.configured, true);
+  assert.equal(resolved.model, 'some/other-model:free');
+  assert.equal(resolved.baseUrl, 'https://openrouter.ai/api/v1');
+});
+
+test('the gemini preset uses the Gemini transport, not the OpenAI one', async () => {
+  // Picking Gemini by name must not produce a `/chat/completions` URL against
+  // Google, which serves no such endpoint.
+  const info = llmInfo({ LLM_PRESET: 'gemini', LLM_API_KEY: 'k' });
+  assert.equal(info.enabled, true);
+  assert.equal(info.provider, 'gemini');
+  assert.match(info.endpoint, /generativelanguage\.googleapis\.com/);
+  assert.match(info.endpoint, /\/interactions$/);
 });
 
 test('provider resolution is a pure function of its input', async () => {

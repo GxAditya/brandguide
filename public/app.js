@@ -13,8 +13,8 @@ import { mountOrb } from '/orb.js';
 import { mountGridReveal } from '/grid-reveal.js';
 import { render as renderExport } from '/export/index.js';
 import {
-  PROVIDERS, authHeaders, clearCreds, hasLlmKey, hasTinyfishKey, isPersistent,
-  loadCreds, saveCreds,
+  PROVIDERS, authHeaders, clearCreds, findProvider, hasLlmKey, hasTinyfishKey,
+  isPersistent, loadCreds, saveCreds,
 } from '/creds.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -155,6 +155,9 @@ function initSettings() {
   const error = $('#settings-error');
   if (!sheet || !backdrop || !trigger || !provider) return;
 
+  const modelSelect = $('#llm-model');
+  const ok = $('#settings-ok');
+
   for (const option of PROVIDERS) {
     const node = document.createElement('option');
     node.value = option.value;
@@ -164,31 +167,135 @@ function initSettings() {
 
   let restoreFocus = null;
 
-  /** The narration fields follow the provider: OpenAI-compatible needs a base and a model. */
-  const paintProvider = () => {
-    const chosen = provider.value;
-    const openAi = chosen === 'openai';
-    const on = Boolean(chosen);
-
-    for (const id of ['#llm-key-field', '#llm-base-field', '#llm-model-field']) {
-      const field = $(id);
-      if (field) field.hidden = !on || (id === '#llm-base-field' && !openAi) || (id === '#llm-model-field' && !openAi);
-    }
-
-    const help = $('#llm-key-help');
-    if (help) {
-      help.textContent = !on
-        ? 'Pick a provider to narrate.'
-        : openAi
-          ? 'The key for that server.'
-          : 'From aistudio.google.com/apikey.';
-    }
-  };
+  /**
+   * The last base URL a preset put in the field, and the last one the user typed.
+   *
+   * Both are needed because the two are indistinguishable by value. Without the first,
+   * switching to "something else" leaves a provider's URL sitting in an editable field
+   * waiting for a key. Without the second, a genuine custom server is forgotten every
+   * time the user glances at another provider.
+   */
+  let presetFilledUrl = '';
+  let customUrl = '';
 
   const showError = (message) => {
     if (!error) return;
     error.textContent = message;
     error.hidden = !message;
+    if (message && ok) {
+      ok.textContent = '';
+      ok.hidden = true;
+    }
+  };
+
+  const showOk = (message) => {
+    if (!ok) return;
+    ok.textContent = message;
+    ok.hidden = !message;
+    if (message && error) {
+      error.textContent = '';
+      error.hidden = true;
+    }
+  };
+
+  /**
+   * Everything downstream of the chosen provider.
+   *
+   * The base URL and the model list both come from the preset, so picking a provider
+   * fills them in. Only "something else" leaves the base URL editable, because that is
+   * the one case where the server genuinely cannot know the answer.
+   */
+  const paintProvider = () => {
+    const chosen = provider.value;
+    const entry = findProvider(chosen);
+    const on = Boolean(chosen);
+    const custom = chosen === 'custom';
+    const gemini = entry?.transport === 'gemini';
+
+    for (const id of ['#llm-key-field', '#llm-base-field', '#llm-model-field']) {
+      const field = $(id);
+      if (field) field.hidden = !on;
+    }
+
+    // Model list: the preset's live catalogue, with automatic first.
+    if (modelSelect) {
+      modelSelect.replaceChildren();
+      if (on) {
+        const auto = el('option', '', entry?.models?.length ? 'Automatic — use whichever has capacity' : 'Automatic');
+        auto.value = '';
+        modelSelect.append(auto);
+        for (const model of entry?.models || []) {
+          const node = el('option', '', model.note ? `${model.label} — ${model.note}` : model.label);
+          node.value = model.id;
+          modelSelect.append(node);
+        }
+      }
+    }
+
+    const base = $('#llm-base');
+    if (base) {
+      // A preset owns its URL. It is shown but not editable, so it reads as fact
+      // rather than as a field to get wrong.
+      base.readOnly = !custom;
+
+      if (entry?.baseUrl) {
+        base.value = entry.baseUrl;
+        presetFilledUrl = entry.baseUrl;
+      } else if (custom) {
+        // Clear the previous provider's URL, because leaving it would be worse than
+        // an empty field: someone would paste a key and send it to whichever provider
+        // happened to be selected before.
+        if (base.value === presetFilledUrl) base.value = customUrl;
+        presetFilledUrl = '';
+      }
+    }
+
+    const baseHelp = $('#llm-base-help');
+    if (baseHelp) {
+      baseHelp.textContent = custom
+        ? 'The root that /chat/completions is appended to.'
+        : `Filled in from ${entry?.label ?? 'the provider'}.`;
+    }
+
+    const modelHelp = $('#llm-model-help');
+    if (modelHelp) {
+      modelHelp.textContent = gemini
+        ? 'Optional. Gemini free tier is 20 requests a day per model, so narration moves to another model when one is full.'
+        : on
+          ? 'Optional. On automatic, another model from the list is tried when this one is unavailable.'
+          : '';
+    }
+
+    const keyHelp = $('#llm-key-help');
+    if (keyHelp) {
+      keyHelp.textContent = !on
+        ? 'Pick a provider to narrate.'
+        : entry?.keyUrl
+          ? 'Paste the key from the link below.'
+          : 'The key for that server.';
+    }
+
+    const keyLink = $('#llm-key-link');
+    if (keyLink) {
+      keyLink.hidden = !entry?.keyUrl;
+      if (entry?.keyUrl) keyLink.href = entry.keyUrl;
+    }
+
+    const providerHelp = $('#llm-provider-help');
+    if (providerHelp) {
+      providerHelp.textContent = on
+        ? entry?.hint ?? ''
+        : 'Optional. A model writes the tone paragraph and message pillars from the measured facts. Leave this off and you get the seven measured pages, which is the recommended mode.';
+    }
+
+    const tags = $('#llm-provider-tags');
+    if (tags) {
+      tags.replaceChildren();
+      const free = el('span', 'tag tag-free', 'free tier');
+      const note = el('span', 'tag', entry?.label ?? '');
+      tags.append(free, note);
+      tags.hidden = !on || !entry?.free;
+    }
   };
 
   const open = () => {
@@ -198,10 +305,17 @@ function initSettings() {
     $('#tinyfish-key').value = creds.tinyfishKey;
     $('#llm-key').value = creds.llm.key;
     $('#llm-base').value = creds.llm.base;
-    $('#llm-model').value = creds.llm.model;
-    provider.value = creds.llm.provider;
+    provider.value = creds.llm.preset;
+    customUrl = creds.llm.base || '';
+    presetFilledUrl = '';
+
+    // Paint before restoring the model, because paintProvider replaces the option
+    // list and a value set beforehand would have nowhere to live.
     paintProvider();
+    if (modelSelect && creds.llm.model) modelSelect.value = creds.llm.model;
+
     showError('');
+    showOk('');
     paintStorageNote();
 
     // Fall back to the trigger when nothing meaningful was focused. A synthetic
@@ -227,38 +341,124 @@ function initSettings() {
     backdrop.hidden = true;
     trigger.setAttribute('aria-expanded', 'false');
     showError('');
+    showOk('');
     if (restoreFocus instanceof HTMLElement) restoreFocus.focus();
     restoreFocus = null;
   };
 
-  /** Save, then reflect the result in the navbar and in the length control. */
-  const save = () => {
-    const tinyfishKey = $('#tinyfish-key').value.trim();
-
-    if (!tinyfishKey) {
-      showError('A TinyFish API key is needed to read any site. Keys are free at agent.tinyfish.ai.');
-      $('#tinyfish-key').focus();
-      return;
-    }
-
-    const chosen = provider.value;
-    const llmKey = $('#llm-key').value.trim();
+  /**
+   * Read the form out. Kept separate from `save` so Test can send exactly what Save
+   * would store — a key that tests is not the key that saves would be a worse bug
+   * than no Test button at all.
+   */
+  const readForm = () => {
+    // Capture while the field still holds what the user typed: a preset overwrites it
+    // on the next change event, and a custom URL typed now must survive a glance at
+    // another provider.
     const base = $('#llm-base').value.trim();
-    const model = $('#llm-model').value.trim();
+    if (provider.value === 'custom' && base) customUrl = base;
 
-    // An OpenAI-compatible server needs all three of base, model and key, and a
-    // half-filled one fails at request time with a message from the pipeline. It is
-    // better to say so here, while the fields are still on screen.
-    if (chosen === 'openai' && llmKey && !(base && model)) {
-      showError('An OpenAI-compatible server needs a base URL and a model as well as the key.');
-      (base ? $('#llm-model') : $('#llm-base')).focus();
+    return {
+      tinyfishKey: $('#tinyfish-key').value.trim(),
+      llm: {
+        preset: provider.value,
+        key: $('#llm-key').value.trim(),
+        base,
+        model: modelSelect ? modelSelect.value.trim() : '',
+      },
+    };
+  };
+
+  /**
+   * Validate the form the way `save` does, returning the message when it cannot be
+   * saved. Empty here rather than duplicated so the two cannot drift.
+   */
+  const validate = (form) => {
+    if (!form.tinyfishKey) {
+      return {
+        message: 'A TinyFish API key is needed to read any site. Keys are free at agent.tinyfish.ai.',
+        focus: '#tinyfish-key',
+      };
+    }
+
+    // "Something else" is the only provider with no known base URL, and a missing one
+    // fails at request time with a message from the pipeline rather than here.
+    if (form.llm.preset === 'custom' && form.llm.key && !form.llm.base) {
+      return {
+        message: 'An OpenAI-compatible server needs a base URL as well as the key.',
+        focus: '#llm-base',
+      };
+    }
+
+    return null;
+  };
+
+  const save = () => {
+    const form = readForm();
+    const problem = validate(form);
+
+    if (problem) {
+      showError(problem.message);
+      $(problem.focus)?.focus();
       return;
     }
 
-    saveCreds({ tinyfishKey, llm: { provider: llmKey ? chosen : '', key: llmKey, base, model } });
+    saveCreds(form);
     paintCredState();
     syncLengthAvailability();
     close();
+  };
+
+  /**
+   * One minimal request against whatever is in the form right now.
+   *
+   * Costs a single request from the caller's quota, which is the point: finding out
+   * a key is wrong here is far cheaper than finding out after a full crawl. The
+   * transport's own failure text is shown verbatim because it names the model, the
+   * limit and the fix, and paraphrasing it would throw all three away.
+   */
+  const test = async () => {
+    const form = readForm();
+    const problem = validate(form);
+
+    if (problem) {
+      showError(problem.message);
+      $(problem.focus)?.focus();
+      return;
+    }
+
+    if (!form.llm.preset || !form.llm.key) {
+      showError('There is no narration key to test. The measured pages need no key at all.');
+      return;
+    }
+
+    const button = $('#settings-test');
+    button.disabled = true;
+    button.textContent = 'Testing…';
+    showError('');
+    showOk('');
+
+    try {
+      const response = await fetch('/api/v1/llm-check', {
+        method: 'POST',
+        headers: llmHeaders(form),
+      });
+      const result = await response.json();
+
+      if (result.ok) {
+        showOk(
+          `${result.provider} answered via ${result.model} in ${result.latencyMs}ms. ` +
+          'Narration will be included in your next run.',
+        );
+      } else {
+        showError(result.reason || 'The provider did not accept that key.');
+      }
+    } catch (err) {
+      showError(err.message || 'Could not reach the server to test that key.');
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Test';
+    }
   };
 
   const forget = () => {
@@ -266,10 +466,11 @@ function initSettings() {
     $('#tinyfish-key').value = '';
     $('#llm-key').value = '';
     $('#llm-base').value = '';
-    $('#llm-model').value = '';
+    if (modelSelect) modelSelect.value = '';
     provider.value = '';
     paintProvider();
     showError('');
+    showOk('');
     paintStorageNote();
     paintCredState();
     syncLengthAvailability();
@@ -284,10 +485,19 @@ function initSettings() {
   $('#settings-cancel')?.addEventListener('click', close);
   $('#settings-save')?.addEventListener('click', save);
   $('#settings-clear')?.addEventListener('click', forget);
+  $('#settings-test')?.addEventListener('click', test);
   backdrop.addEventListener('click', close);
+
+  // Captured as it is typed rather than on save, because a preset overwrites the field
+  // on the next provider change and by then the typed value is already gone.
+  $('#llm-base')?.addEventListener('input', () => {
+    if (provider.value === 'custom') customUrl = $('#llm-base').value.trim();
+  });
+
   provider.addEventListener('change', () => {
     paintProvider();
     showError('');
+    showOk('');
   });
 
   // Enter saves from any field, which is what a form does and what the markup
@@ -342,6 +552,21 @@ function trapTab(event, sheet, { trigger, close }) {
   }
 
   void close;
+}
+
+/**
+ * Headers for one unsaved form's credentials.
+ *
+ * Deliberately not `authHeaders()`, which reads storage: Test must check what is on
+ * screen, so that changing a field and pressing Test says something about the change.
+ */
+function llmHeaders(form) {
+  const headers = {};
+  if (form.llm.key) headers['x-brandkit-llm-key'] = form.llm.key;
+  if (form.llm.preset) headers['x-brandkit-llm-preset'] = form.llm.preset;
+  if (form.llm.base) headers['x-brandkit-llm-base'] = form.llm.base;
+  if (form.llm.model) headers['x-brandkit-llm-model'] = form.llm.model;
+  return headers;
 }
 
 /** Storage can be refused outright, and a save that silently did not persist is worse than a warning. */
@@ -488,7 +713,7 @@ function syncLengthAvailability() {
   if (help) {
     help.textContent = enabled
       ? 'How long the full document should be. The measured pages always appear; the written ones fill to this length.'
-      : 'Seven pages are produced from measurement alone. Add a narration key in Settings to generate the full document, where this becomes the page count.';
+      : 'Seven pages are produced from measurement alone. Add a narration key in Settings — there is a free tier on several providers — to generate the full document, where this becomes the page count.';
   }
 }
 
@@ -1096,8 +1321,29 @@ function svgAlertIcon() {
   return icon;
 }
 
+/**
+ * What to tell someone about a finished run.
+ *
+ * A silent degradation is the worst outcome here. The measured pages render either
+ * way, so a narration key that failed produces a document that looks complete and is
+ * seven pages instead of fourteen — which reads as a bug in the product rather than a
+ * rate limit on a free tier. So when a narration key was sent and did not produce a
+ * narrative, that is reported as a warning with the transport's own reason.
+ */
 function warningsToAlert(payload) {
-  const warnings = payload.warnings || [];
+  const warnings = [...(payload.warnings || [])];
+
+  const llm = payload.llm;
+  const meta = payload.narrativeMeta;
+  const narrationMissing = llm?.enabled && !payload.narrative && meta && !meta.used;
+
+  if (narrationMissing) {
+    warnings.unshift(
+      `Narration was skipped: ${meta.reason || 'the provider did not return a narrative.'} ` +
+      'The measured pages are unaffected.',
+    );
+  }
+
   if (!warnings.length) return null;
   return {
     message: `Completed with ${warnings.length === 1 ? 'one note' : `${warnings.length} notes`}.`,

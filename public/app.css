@@ -379,6 +379,71 @@ a { color: inherit; }
 
 .sheet-note[data-warn="true"] { color: var(--warn); }
 
+/* A free tier is the fact that decides whether someone can use a provider at all, so
+   it is stated rather than left implied by a label. Colour is never the only signal:
+   the words are inside the tag. */
+.field-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+.tag {
+  display: inline-block;
+  padding: 3px 9px;
+  background: var(--ink-100);
+  border: 1px solid var(--ink-250);
+  border-radius: var(--r-pill);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  color: var(--dim);
+}
+
+.tag-free {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--ink-250));
+  color: var(--ok);
+}
+
+/* A preset owns its base URL, so the field is shown but not editable: it reads as
+   fact rather than as something to get wrong. */
+#llm-base[readonly] {
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  cursor: default;
+}
+
+#llm-base[readonly]:hover { border-color: var(--ink-300); }
+#llm-base[readonly]:focus { border-color: var(--accent); }
+
+.field-link {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.field-link:hover { color: var(--accent-dim); }
+
+/* The verdict on a tested credential, paired with the error style rather than
+   replacing it: both are a verdict, and they should look like a matched pair. */
+.field-ok {
+  margin: 0;
+  padding: 9px 11px;
+  background: color-mix(in srgb, var(--ok) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ok) 34%, transparent);
+  border-radius: var(--r-control);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--paper);
+}
+
+#settings-test[disabled] { opacity: 0.6; cursor: progress; }
+
 .sheet-foot {
   display: flex;
   align-items: center;

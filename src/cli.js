@@ -44,10 +44,20 @@ Options
 Optional narration layer. Without these the deterministic core runs, which is the
 recommended mode: no key, no spend, and the measured pages are produced anyway.
 
-  --llm <provider>     gemini | openai                   (default: gemini)
-  --llm-key <key>      Narration key. Gemini, or any OpenAI-compatible server
-  --llm-base <url>     Base URL for an OpenAI-compatible server. Required there
-  --llm-model <id>     Model id. Defaults to the current Gemini flagship
+  --llm-preset <id>    gemini | openrouter | groq | nvidia | openai | cerebras
+                       | mistral | deepseek | custom
+                       Supplies the base URL and a working model
+  --llm-key <key>      Narration key
+  --llm <transport>    gemini | openai. Overrides the preset's transport
+  --llm-base <url>     Base URL. Only needed with --llm-preset custom
+  --llm-model <id>     Model id. Optional: another model is tried when this one is
+                       unavailable or over its rate limit
+
+Free tiers, so --llm-preset with just a key is enough:
+  gemini      20 requests/day per model, moves to another model when full
+  openrouter  16 free models, all ending :free
+  groq        fast, free developer tier
+  nvidia      free hosted models; retired ones answer 410 Gone
 
 Input can be a URL ("linear.app", "https://linear.app") or a company name
 ("linear"). Names are resolved with TinyFish Search.
@@ -55,25 +65,37 @@ Input can be a URL ("linear.app", "https://linear.app") or a company name
 Everything is read live through TinyFish Search and Fetch. Nothing is stored.
 `;
 
-/** Map the narration flags onto the shape src/server/creds.js produces for the web. */
+/**
+ * Map the narration flags onto the credential shape the pipeline reads.
+ *
+ * `--llm-preset` is the useful one: it supplies the base URL and a working model, so
+ * scripting a free provider needs a key and a name rather than three exact values.
+ */
 function llmCreds(args) {
   if (!args['llm-key']) return {};
 
-  const provider = String(args.llm || 'gemini').toLowerCase();
+  const preset = args['llm-preset'] ? String(args['llm-preset']).toLowerCase() : '';
+  const provider = args.llm ? String(args.llm).toLowerCase() : preset;
   const key = args['llm-key'];
   const base = args['llm-base'] ? String(args['llm-base']) : '';
   const model = args['llm-model'] ? String(args['llm-model']) : '';
 
-  if (provider === 'openai' || provider === 'openai-compatible') {
+  // A preset, or an explicit `--llm gemini`, means the Gemini transport.
+  if (provider === 'gemini' || (preset && preset === 'gemini')) {
     return {
-      LLM_PROVIDER: 'openai-compatible',
-      LLM_API_KEY: key,
-      ...(base ? { LLM_BASE_URL: base } : {}),
-      ...(model ? { LLM_MODEL: model } : {}),
+      GEMINI_API_KEY: key,
+      ...(preset ? { LLM_PRESET: preset } : {}),
+      ...(model ? { GEMINI_MODEL: model } : {}),
     };
   }
 
-  return { GEMINI_API_KEY: key, ...(model ? { GEMINI_MODEL: model } : {}) };
+  return {
+    ...(provider ? { LLM_PROVIDER: 'openai-compatible' } : {}),
+    LLM_API_KEY: key,
+    ...(preset ? { LLM_PRESET: preset } : {}),
+    ...(base ? { LLM_BASE_URL: base } : {}),
+    ...(model ? { LLM_MODEL: model } : {}),
+  };
 }
 
 function parseArgs(argv) {
@@ -83,6 +105,7 @@ function parseArgs(argv) {
     if (arg === '-o' || arg === '--out') args.out = argv[++i];
     else if (arg === '--key') args.key = argv[++i];
     else if (arg === '--llm') args.llm = argv[++i];
+    else if (arg === '--llm-preset') args['llm-preset'] = argv[++i];
     else if (arg === '--llm-key') args['llm-key'] = argv[++i];
     else if (arg === '--llm-base') args['llm-base'] = argv[++i];
     else if (arg === '--llm-model') args['llm-model'] = argv[++i];

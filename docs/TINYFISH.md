@@ -138,28 +138,36 @@ Two providers are supported. Both come from the caller's own request — a heade
 per request — never from the server's environment, so one deployment serves many
 people with different keys.
 
-- **Gemini** — send `X-BrandKit-Llm-Key`, and optionally
-  `X-BrandKit-Llm-Model`. A key with no provider selected means Gemini, which is
-  why the shortest setup is one field. Google does not serve
-  `/chat/completions` on its own domain, so this uses the Interactions API:
-  `POST https://generativelanguage.googleapis.com/v1beta/interactions` with an
-  `x-goog-api-key` header, `input`/`system_instruction` in the body, and the
-  narrative requested as JSON by schema. A thinking level is sent explicitly
-  because Gemini 3 reasons by default and those tokens are drawn from the same
-  output budget as the reply.
-- **Any OpenAI-compatible endpoint** — send `X-BrandKit-Llm-Provider: openai`
-  together with the key, base URL and model (OpenAI, Groq, OpenRouter, Together,
-  DeepSeek, Mistral, xAI, Cerebras, or a local Ollama).
+- **Gemini** — send `X-BrandKit-Llm-Key`, and optionally `X-BrandKit-Llm-Model`. A key
+  with no provider selected means Gemini, which is why the shortest setup is one field.
+  Google does not serve `/chat/completions` on its own domain, so this uses the
+  Interactions API: `POST https://generativelanguage.googleapis.com/v1beta/interactions`
+  with an `x-goog-api-key` header, `input`/`system_instruction` in the body, and the
+  narrative requested as JSON by schema. A thinking level is sent explicitly because
+  Gemini 3 reasons by default and those tokens come out of the same output budget as the
+  reply.
+- **Any OpenAI-compatible endpoint** — send `X-BrandKit-Llm-Preset` for a known provider
+  plus `X-BrandKit-Llm-Key`, and the preset supplies the base URL and a live model. Or
+  send the base URL, model and key yourself.
 
-The provider header picks explicitly. Left unset, a complete OpenAI-compatible
-set wins over a bare key, because three agreeing fields are a clearer signal than
-one. An unrecognised value is an error naming the valid ones rather than a silent
-fallback.
+The free tiers are the reason there are **two** ladders. A failure means one of two very
+different things, and treating them the same was a real bug:
 
-On both paths the request starts at its fullest and sheds optional fields if the
-provider rejects them — `response_format` and the token cap for OpenAI, the
-schema and `thinking_level` for Gemini — so an endpoint implementing only part of
-either shape still works rather than erroring out.
+- **Refused** (400, 404, 422) — an unsupported field, or a model id the provider has
+  retired. The same call is retried shedding one optional field: `response_format` and
+  the token cap for OpenAI, the schema and `thinking_level` for Gemini.
+- **Unavailable** (429, 5xx) — a smaller body cannot help, and trying one would spend
+  the caller's quota to prove it. The identical request is retried with backoff, and on
+  Gemini the ladder moves to a **different model**.
+
+Gemini's free tier is 20 requests a day *per model*, and measured on it the 3.8
+flagship returned `503 high demand` for structured requests — the exact shape this app
+sends — while `gemini-3.1-flash-lite` answered. So the default starts there, the ladder
+walks down a fallback list, and a daily limit is reported with its reset time rather
+than waited out or retried into the ground.
+
+Preset model lists are snapshots. Providers retire ids constantly, and a retired one is
+named in the error rather than surfacing as a bare status code.
 
 Three rules are enforced in `src/pipeline/llm.js`, not just in the prompt:
 
