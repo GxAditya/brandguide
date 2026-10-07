@@ -11,9 +11,7 @@
   "scripts": {
     "start": "node src/server/index.js",
     "dev": "node --watch src/server/index.js",
-    "test": "node --test \"test/**/*.test.js\"",
-    "demo": "node scripts/demo.mjs",
-    "shots": "node scripts/screenshot.mjs"
+    "test": "node --test \"test/**/*.test.js\""
   },
   "keywords": [
     "brand-guide",
