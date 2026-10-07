@@ -260,7 +260,7 @@ function initSettings() {
     const modelHelp = $('#llm-model-help');
     if (modelHelp) {
       modelHelp.textContent = gemini
-        ? 'Optional. Gemini free tier is 20 requests a day per model, so narration moves to another model when one is full.'
+        ? 'Optional. Free tier limits are per project and reset daily, so narration moves to another model when one is full.'
         : on
           ? 'Optional. On automatic, another model from the list is tried when this one is unavailable.'
           : '';

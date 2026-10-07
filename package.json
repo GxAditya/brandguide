@@ -8,16 +8,12 @@
   "engines": {
     "node": ">=20.18"
   },
-  "bin": {
-    "brandkit": "./src/cli.js"
-  },
   "scripts": {
     "start": "node src/server/index.js",
     "dev": "node --watch src/server/index.js",
     "test": "node --test \"test/**/*.test.js\"",
     "demo": "node scripts/demo.mjs",
-    "shots": "node scripts/screenshot.mjs",
-    "brandkit": "node src/cli.js"
+    "shots": "node scripts/screenshot.mjs"
   },
   "keywords": [
     "brand-guide",

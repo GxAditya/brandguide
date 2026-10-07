@@ -14,7 +14,7 @@ import { resolveLlm } from '../src/pipeline/llm-provider.js';
 import { callGemini } from '../src/pipeline/llm-gemini.js';
 import { callOpenAiCompatible } from '../src/pipeline/llm-openai.js';
 import { narrate } from '../src/pipeline/llm.js';
-import { PRESETS, GEMINI_FALLBACKS, GEMINI_MODELS } from '../src/pipeline/llm-presets.js';
+import { PRESETS, GEMINI_FALLBACKS, GEMINI_MODELS, LIMITS } from '../src/pipeline/llm-presets.js';
 
 const FACTS = {
   identity: { name: 'Acme', domain: 'acme.test' },
@@ -150,7 +150,9 @@ test('a daily rate limit is reported, not waited through', async () => {
       () => callGemini({ system: 's', user: 'u' }, { ...config, endpoint: `${mock.base}/interactions` }),
       (err) => {
         assert.match(err.message, /rate limited/i);
-        assert.match(err.message, /20 requests per day/i);
+        // Asserted against LIMITS rather than a literal, because the free tier numbers
+        // are Google's to change and the copy here follows them.
+        assert.ok(err.message.includes(LIMITS.gemini), 'the free tier guidance should be quoted');
         assert.match(err.message, /8h/, 'the reset time should be reported');
         return true;
       },

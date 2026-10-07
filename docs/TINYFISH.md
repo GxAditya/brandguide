@@ -5,13 +5,20 @@ This is the short answer to "what does TinyFish actually do here".
 **Every byte of the target site enters BrandKit through TinyFish.** There is no
 direct `fetch()` of the customer's website, no headless browser in the default
 path, and no scraping library. `src/tinyfish/client.js` is the only module in
-the codebase that opens a socket.
+the codebase that opens a socket *to a target site*.
+
+Two more files open sockets, to the caller's own chosen LLM endpoint and only when
+they send a key: `src/pipeline/llm-gemini.js` and `src/pipeline/llm-openai.js`.
+Neither touches a customer site.
+
+For scope and the rest of the product, see the README. This file covers only what
+TinyFish does and why.
 
 Two surfaces are used, both free at any balance:
 
 | Surface | Endpoint | What it does here |
 | --- | --- | --- |
-| **Search** | `GET api.search.tinyfish.ai` | Turns a company name into its official domain, and finds competitors for the benchmark endpoint |
+| **Search** | `GET api.search.tinyfish.ai` | Turns a company name into its official domain, and finds competitors for `POST /api/v1/compare` |
 | **Fetch** | `POST api.fetch.tinyfish.ai` | Reads pages, stylesheets, manifests and image assets |
 
 Browser and Agent are deliberately unused. They are metered, and they are not
@@ -109,9 +116,9 @@ nothing here".
   CIEDE2000, sentence-level linguistic measurement, the token graph — is
   computed locally. An LLM is optional (see below) and structurally cannot
   touch colour, type or logo values.
-- **It is not padded.** Four endpoints run four different pipelines. None is a
-  wrapper around another, and none calls TinyFish for show. The UI shows the
-  live call log with real latencies so the traffic can be audited.
+- **It is not padded.** Both endpoints read the live site through Search and
+  Fetch, and every response carries the full per-call provenance with real
+  latencies, so the traffic is auditable.
 
 ---
 
@@ -125,6 +132,10 @@ time with a short gap. Firing all five at once once tripped the rate limit, and
 a third of the stylesheets came back missing — taking the `@font-face` rules
 with them and emptying the brand's entire type system from the guide. The
 client also honours `Retry-After` and retries with jittered backoff.
+
+Those figures come from the TinyFish docs and from that one incident. They were
+not re-measured in October 2026, so treat them as the shape of the limit rather
+than a current number.
 
 ---
 
@@ -150,6 +161,12 @@ people with different keys.
   plus `X-BrandKit-Llm-Key`, and the preset supplies the base URL and a live model. Or
   send the base URL, model and key yourself.
 
+A bare `X-BrandKit-Llm-Key` with no preset is treated as Gemini
+(`src/server/creds.js:117`), which is why the shortest setup in the UI is one
+field. Nine presets are available: five free tiers (`gemini`, `openrouter`, `groq`,
+`nvidia`, `cerebras`), three paid (`openai`, `mistral`, `deepseek`), and `custom`
+for any other `/chat/completions` server.
+
 The free tiers are the reason there are **two** ladders. A failure means one of two very
 different things, and treating them the same was a real bug:
 
@@ -160,14 +177,22 @@ different things, and treating them the same was a real bug:
   the caller's quota to prove it. The identical request is retried with backoff, and on
   Gemini the ladder moves to a **different model**.
 
-Gemini's free tier is 20 requests a day *per model*, and measured on it the 3.8
-flagship returned `503 high demand` for structured requests — the exact shape this app
-sends — while `gemini-3.1-flash-lite` answered. So the default starts there, the ladder
-walks down a fallback list, and a daily limit is reported with its reset time rather
-than waited out or retried into the ground.
+Google no longer publishes per-model free tier numbers; the limits are shown in AI
+Studio. What is measurable is the capacity behaviour: on the free tier
+`gemini-3.8-flash` returned `503 high demand` for structured requests — the exact
+shape this app sends — while `gemini-3.1-flash-lite` answered. So the default starts
+there, the ladder walks down a fallback list, and a daily limit is reported with its
+reset time rather than waited out or retried into the ground.
 
-Preset model lists are snapshots. Providers retire ids constantly, and a retired one is
-named in the error rather than surfacing as a bare status code.
+Preset model lists are snapshots, and they rot. Providers retire ids constantly, and a
+retired one is named in the error rather than surfacing as a bare status code. The
+lists in `src/pipeline/llm-presets.js` were last checked against each provider's own
+model list on **7 October 2026**, and that check is worth repeating rather than
+trusting: an audit on that date found `gemini-3.8-flash-lite` in the fallback ladder
+when no such model existed, all three Cerebras ids gone (shared inference now serves
+only `gpt-oss-120b` and `qwen-3.8-27b`), and two Groq ids that are enterprise-only
+rather than free. `GET /api/v1` returns whatever the server holds and is the
+authoritative copy.
 
 Three rules are enforced in `src/pipeline/llm.js`, not just in the prompt:
 
@@ -195,6 +220,6 @@ The demo script is the one place a key still comes from the environment: it has 
 settings panel to read from, and passing one on the command line would put it in
 the shell history of every demo run.
 
-The script prints every TinyFish call with its latency as it happens, then
-validates each guide against the published JSON Schema. Output lands in
-`demo-output/`.
+The script prints every TinyFish call with its latency as it happens, crawls the
+three demo brands plus the three-brand compare set, then validates each guide
+against the JSON Schema in `src/schema.js`. Output lands in `demo-output/`.

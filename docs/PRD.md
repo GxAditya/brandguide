@@ -4,8 +4,17 @@
 > palette, typography, tone of voice, key messaging — pulled from the live site.
 
 - **Bounty:** TinyFish "Brand Guide Generator"
-- **Status:** Draft for build
+- **Status:** Built. This document is the original plan, kept for reference.
 - **Owner:** aditya
+
+> **Where the build diverged from this plan.** Two of the four endpoints in §4 were
+> never wired up: `POST /api/v1/identity` and `POST /api/v1/voice` are not in
+> `src/server/index.js` and return `404`. `GET /api/v1/schema` likewise does not
+> exist; the schema is exported from `src/schema.js`. The extraction those endpoints
+> described is real and runs inside the brand-guide and compare pipelines, and its
+> output is in the guide and the `?format=` exports. Two sections also drifted from
+> the code and are marked in place. **The README is the current source of truth for
+> what exists.** `TASKS.md` records what actually shipped.
 
 ---
 
@@ -80,8 +89,10 @@ The app is fully functional with no LLM key. That is the default.
 
 ## 4. Endpoints
 
-Four endpoints. Each runs a different pipeline and produces a different
-artifact. None is a wrapper around another.
+> **As built: two.** `POST /api/v1/brand-guide` (also over `GET`) and
+> `POST /api/v1/compare`. The plan below lists four; §4.2 and §4.3 were folded into
+> §4.1 rather than shipped as separate routes, and §4.4 shipped as planned. The
+> capability each described is still present in the output.
 
 ### 4.1 `POST /api/v1/brand-guide` — the kit
 
@@ -108,7 +119,7 @@ Pipeline: `Search` (if input is a name) → `Fetch` head → `Fetch` stylesheets
 }
 ```
 
-### 4.2 `POST /api/v1/identity` — visual forensics
+### 4.2 `POST /api/v1/identity` — visual forensics *(never shipped as a route)*
 
 `{ url }` → design-token payload. Goes **deeper into CSS** than the kit:
 resolves `--var` alias chains to final values, walks the token graph, assigns
@@ -120,7 +131,7 @@ with format + byte-size detection.
 Returns: Style Dictionary JSON, `:root` CSS, Tailwind theme, Figma Variables
 collection. This is the endpoint that answers *"drop it into Figma."*
 
-### 4.3 `POST /api/v1/voice` — voice & messaging lab
+### 4.3 `POST /api/v1/voice` — voice & messaging lab *(never shipped as a route)*
 
 `{ url }` → linguistic analysis. Goes **deeper into copy** than the kit: crawls
 content pages by intent (`/about`, `/careers`, `/blog/*`, `/press`, `/pricing`,
@@ -144,31 +155,47 @@ brand" list. 2–5 brands.
 
 ### Supporting routes
 
-- `GET /api/v1/schema` — JSON Schema for the guide object.
-- `GET /api/v1/health` — key presence, upstream reachability.
+> **As built.** `GET /api/v1/schema` was planned and does not exist; the schema is
+> exported from `src/schema.js` as `BRAND_GUIDE_SCHEMA`. `GET /api/v1/health` was
+> planned to report key presence and upstream reachability; it ships as liveness
+> only and deliberately makes no upstream call, so a platform health check can
+> point at it safely. `POST /api/v1/llm-check` and `GET /api/v1/stream` were added
+> and are not in this list.
+
+- `GET /api/v1/health` — liveness and the credential header names. No upstream call.
+- `GET /api/v1` — the provider preset catalogue.
+- `GET /api/v1/stream` — SSE, so the UI can show each source as it is read.
+- `POST /api/v1/llm-check` — one minimal request against a narration credential.
 - `GET /` — the UI.
-- `?format=` on any endpoint: `json` · `markdown` · `css` · `tailwind` · `styledictionary` · `figma`.
+- `?format=` on brand-guide and compare only: `json` · `markdown` · `css` ·
+  `tailwind` · `styledictionary` · `figma` · `svg`.
 
 ---
 
 ## 5. Non-functional requirements
 
-| Requirement | Target |
-| --- | --- |
-| Runtime dependencies | **0** |
-| Cold start | < 100 ms |
-| Single guide, depth `standard` | < 45 s wall clock |
-| Works for any public site | no hardcoded domains, brands, or selectors |
-| Every claim traceable | each extracted value carries `source` (URL + how) |
-| Graceful degradation | per-URL fetch errors collected, never fatal |
-| Secrets | env only, never logged, never returned |
+| Requirement | Target | Status |
+| --- | --- | --- |
+| Runtime dependencies | **0** | met |
+| Cold start | < 100 ms | **unmeasured.** No test or benchmark asserts it. |
+| Single guide, depth `standard` | < 45 s wall clock | **unmeasured.** The only per-run timing in code is per-call `durationMs` in the provenance block. The UI's own copy says "a 25-second crawl". |
+| Works for any public site | no hardcoded domains, brands, or selectors | met |
+| Every claim traceable | each extracted value carries `source` (URL + how) | met |
+| Graceful degradation | per-URL fetch errors collected, never fatal | met |
+| Secrets | env only, never logged, never returned | met, and stronger than planned: keys are per request in headers, so the server stores none at all |
+
+The two timing figures were targets, not commitments, and nothing measures them.
+Either add a benchmark or drop them; do not leave them looking like results.
 
 ### Constraints
 
 - Fetch allows 10 URLs per call and ~150 URLs/min per key. The pipeline batches
   into as few calls as possible and runs stages concurrently.
 - Fetch has a 120 s CDN ceiling per batch; client timeout set to 150 s.
-- CSS files can be large. Cap at 12 stylesheets, 2 MB each.
+- CSS files can be large. Cap at 2 MB per stylesheet (`MAX_BYTES_PER_SHEET` in
+  `src/crawl/css.js`), and at 50 stylesheets at `standard` depth, 60 at `deep`
+  (`src/pipeline/collect.js`). The planned cap of 12 was too low: Linear declares
+  49 and the brand tokens live in the last one.
 - Private IPs and localhost are rejected upstream — SSRF is handled by TinyFish.
 
 ---

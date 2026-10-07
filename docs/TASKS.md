@@ -1,8 +1,28 @@
 # TASKS — BrandKit
 
-Derived from `PRD.md`. Ordered by dependency. Tick as you go.
+Derived from `PRD.md`. Ordered by dependency. This is the build log: it records
+what shipped and what was found along the way, including the deviations at the
+end. For what the product *is*, read the README.
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done
+
+---
+
+## Read this first: four places the plan changed
+
+1. **Two endpoints were planned and never shipped.** `POST /api/v1/identity` and
+   `POST /api/v1/voice` (T4.2, T4.3) are not registered in `src/server/index.js`
+   and return `404`. Their extraction runs inside the brand-guide and compare
+   pipelines and its output is in the guide and the `?format=` exports. T6.2 is
+   ticked, but the four it refers to are two.
+2. **No telemetry panel ships.** T7.3 asked for a live pipeline log in the UI. What
+   shipped is a modal listing the sources read, which closes itself when the run
+   finishes. The full per-call provenance is in the response body instead.
+3. **Test counts below are snapshots at the time of each line**, not the current
+   count. It is 215 now. The 109 and 155 figures are kept because they mark when
+   each phase landed.
+4. **The CLI was built and then removed.** There is no `src/cli.js` and no
+   `brandkit` bin entry. See deviation 9.
 
 ---
 
@@ -87,11 +107,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 ## Phase 4 — Endpoints
 
 - [x] **T4.1** `POST /api/v1/brand-guide` — compose all extractors into the kit
-- [x] **T4.2** `POST /api/v1/identity` — deep CSS forensics, token graph, contrast matrix
-- [x] **T4.3** `POST /api/v1/voice` — deep copy crawl + tone vector + do/don't
+- [x] **T4.2** ~~`POST /api/v1/identity`~~ **folded into T4.1**, no route
+      (deep CSS forensics, token graph, contrast matrix all run inside the
+      brand-guide pipeline and reach the output through `?format=`)
+- [x] **T4.3** ~~`POST /api/v1/voice`~~ **folded into T4.1**, no route
+      (copy crawl, tone vector and do/don't likewise)
 - [x] **T4.4** `POST /api/v1/compare` — multi-brand diff, CIEDE2000 + cosine distance
-- [x] **T4.5** `GET /api/v1/schema` — JSON Schema
-- [x] **T4.6** `GET /api/v1/health`
+- [x] **T4.5** ~~`GET /api/v1/schema`~~ schema exported from `src/schema.js` instead
+- [x] **T4.6** `GET /api/v1/health` — liveness only; makes no upstream call
 - [x] **T4.7** Shared request pipeline with per-stage timing streamed to the UI
 
 ## Phase 5 — Output formats
@@ -106,7 +129,8 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 ## Phase 6 — Server
 
 - [x] **T6.1** `src/server/http.js` — zero-dep router, JSON body limit, CORS
-- [x] **T6.2** Wire the four endpoints + supporting routes
+- [x] **T6.2** Wire the endpoints + supporting routes
+      (planned as four; two shipped — see the note at the top)
 - [x] **T6.3** Static file serving for the UI
 - [x] **T6.4** Error envelope `{ error: { code, message, detail } }`
 - [x] **T6.5** Never log a TinyFish key
@@ -115,7 +139,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 - [x] **T7.1** Layout + design system (no framework, no build)
 - [x] **T7.2** Input form: URL or company name, depth selector
-- [x] **T7.3** **Live pipeline log** — each TinyFish call appears as it lands
+- [x] **T7.3** Progress during a run — a modal listing the sources read, which
+      closes itself when the pipeline does. Deliberately not a permanent panel
+      (see the note at the top)
 - [x] **T7.4** **Render the guide in the brand's own colours + fonts**
 - [x] **T7.5** Sections: logo lockup · palette w/ contrast · type specimen ·
       tone meter · pillars · provenance · confidence
@@ -231,13 +257,13 @@ The single scrolling sheet became a paged document. Replaces T7.4 and T7.5.
 | — | Found frequency outranking declared tokens, and added tiering: `--color-brand-bg` beats a hex seen 40 times. |
 | — | Found vendor-prefixed tokens (`--govuk-brand-colour`) invisible to the namespace list, and added the trailing-colour-word rule. |
 | — | Found `font-family: object-fit\: cover` in Patagonia's live CSS, and icon fonts being reported as typefaces. |
-| — | Found `var(--pata-font-serif)` stacks resolving to nothing; typefaces were only reachable through custom properties. |
+| — | Found `var()`-wrapped font stacks resolving to nothing; typefaces were only reachable through custom properties. |
 | — | Found batched stylesheet fetches tripping the rate limit and silently losing the `@font-face` rules. Capped concurrency at two. |
 | — | Found Search returning a LinkedIn profile ahead of the official site; added profile-platform rejection and per-part URL scoring. |
 | — | Found GOV.UK resolving to the name "Gov" because it has no `<h1>`; recovered the name from how the site writes its own domain. |
-| — | 109 tests green, including all 34 CIEDE2000 reference pairs to 4 decimal places. |
+| — | 109 tests green (count at the time; 215 now), including all 34 CIEDE2000 reference pairs to 4 decimal places. |
 | — | Demo runs clean on Linear, GOV.UK and Patagonia; all three validate against the published schema. |
-| — | Guide rebuilt as a paged deck. 155 tests green, including the seven-page deterministic contract, lockup selection, the page budget, SVG sanitisation and tone detection, and the two helpers that decide how a swatch is named and how a variable axis becomes weight stops. |
+| — | Guide rebuilt as a paged deck. 155 tests green (215 now), including the seven-page deterministic contract, lockup selection, the page budget, SVG sanitisation and tone detection, and the two helpers that decide how a swatch is named and how a variable axis becomes weight stops. |
 | — | Found `logos.primary` is SVG-first, so for Tailwind it returned the dark rounded-square app icon rather than the actual logo, which then rendered invisible on a dark cover. Added a separately ranked `logos.lockup` for cover surfaces. |
 | — | Found the deck forced `text-transform: uppercase` on the cover name, rendering `tailwindcss` as `TAILWIND CSS`. Casing is part of the identity, so it now uses the brand's own. |
 | — | Found the deck adopted the brand's background as its paper, so a dark brand produced a book of black pages. The document is now always light; the brand colours only reach swatches, plates and specimens. |
@@ -267,3 +293,22 @@ The single scrolling sheet became a paged document. Replaces T7.4 and T7.5.
    read, the next candidate is tried instead of failing the run.
 5. **Shipped without the LLM layer enabled.** It works and is documented, but the
    deterministic core is the default and is what the demo proves.
+6. **Two endpoints dropped.** `POST /api/v1/identity` and `POST /api/v1/voice`
+   (T4.2, T4.3) were folded into the brand-guide pipeline rather than shipped as
+   routes. `GET /api/v1/schema` was dropped too; the schema is a module export.
+7. **Bring-your-own-key, per request.** The plan assumed keys in the environment.
+   Each caller now sends their own key in headers, so one deployment serves many
+   people and there is nothing stored to leak or rotate. `demo.mjs` is the only
+   exception, since it has no form to read from.
+8. **Nine narration presets, not two providers.** The plan named Gemini and "any
+   OpenAI-compatible endpoint". There are five free tiers, three paid, and
+   `custom`. Preset model ids are snapshots and go stale fast: an audit on
+   7 October 2026 found a dead Gemini id in the fallback ladder, all three Cerebras
+   ids gone, and two Groq ids that are enterprise-only rather than free. Re-check
+   the lists rather than trusting them.
+9. **No CLI.** `src/cli.js` and the `brandkit` bin entry were built, then removed.
+   The product is a frontend and a backend over HTTP, and a second entry point meant
+   two sets of provider resolution rules to keep in step. They had already drifted:
+   the CLI could not infer a provider from a bare key while the HTTP path treated
+   one as Gemini. `scripts/demo.mjs` and `scripts/screenshot.mjs` are the remaining
+   command line surface, and both are tooling rather than a user interface.

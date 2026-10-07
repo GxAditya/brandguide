@@ -9,6 +9,12 @@
  * than written from memory, because model ids rotate constantly. `free` marks a
  * tier that needs no payment method, which is what makes a preset worth having.
  *
+ * Last checked 7 October 2026. Sources per provider: OpenRouter, NVIDIA NIM and
+ * Gemini were read from their live model list endpoints; Groq, Cerebras and
+ * DeepSeek from their published docs; OpenAI and Mistral from their model pages.
+ * A stale id here is a failed run for the person who pasted a key, so re-check
+ * rather than trust this file.
+ *
  * Gemini is not in this table because it does not speak the Chat Completions shape.
  * It has its own transport and lives in llm-provider.js.
  */
@@ -31,11 +37,15 @@ export const PRESETS = [
     hint: 'One key, many models. Free models end in :free and change often — the ones below are live now.',
     keyUrl: 'https://openrouter.ai/keys',
     models: [
+      // The router goes first on purpose: it resolves to whatever free model has
+      // capacity, so this preset cannot go stale the way a pinned id does.
+      { id: 'openrouter/free', label: 'Any free model', note: 'router, never goes stale' },
       { id: 'nvidia/nemotron-3-super-120b-a12b:free', label: 'Nemotron 3 Super 120B' },
+      { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', label: 'Nemotron 3 Ultra 550B' },
       { id: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B' },
       { id: 'google/gemma-4-26b-a4b-it:free', label: 'Gemma 4 26B' },
-      { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', label: 'Nemotron 3 Ultra 550B' },
       { id: 'thinkingmachines/inkling:free', label: 'Inkling' },
+      { id: 'poolside/laguna-s-2.1:free', label: 'Laguna S 2.1' },
       { id: 'nvidia/nemotron-3.5-lightning:free', label: 'Nemotron 3.5 Lightning' },
       { id: 'liquid/lfm-2.5-2.6b:free', label: 'LFM 2.5 2.6B' },
     ],
@@ -46,13 +56,12 @@ export const PRESETS = [
     transport: 'openai',
     free: true,
     baseUrl: 'https://api.groq.com/openai/v1',
-    hint: 'Very fast, free developer tier. Model ids change often; any current one works.',
+    hint: 'Very fast. The free plan covers only the ids below; the Llama models are enterprise-only.',
     keyUrl: 'https://console.groq.com/keys',
     models: [
-      { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile' },
-      { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant' },
-      { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B' },
-      { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B' },
+      { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', note: 'about 500 tokens/s' },
+      { id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B', note: 'preview' },
+      { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', note: 'about 1000 tokens/s' },
     ],
   },
   {
@@ -64,13 +73,15 @@ export const PRESETS = [
     hint: 'Free hosted models with an OpenAI-compatible API. Retired models answer 410 Gone, so pick from the list.',
     keyUrl: 'https://build.nvidia.com/explore/discover',
     models: [
-      { id: 'nvidia/llama-3.1-nemotron-ultra-253b-v1', label: 'Nemotron Ultra 253B' },
-      { id: 'nvidia/llama-3.1-nemotron-70b-instruct', label: 'Nemotron 70B' },
-      { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', label: 'Nemotron 3 Nano Omni 30B', note: 'reasoning' },
-      { id: 'nvidia/mistral-nemo-minitron-8b-8k-instruct', label: 'Minitron 8B' },
-      { id: 'mistralai/mistral-large-2-instruct', label: 'Mistral Large 2' },
-      { id: 'google/gemma-3-12b-it', label: 'Gemma 3 12B' },
+      { id: 'nvidia/nemotron-4-340b-instruct', label: 'Nemotron 4 340B' },
+      { id: 'nvidia/nemotron-3-ultra-550b-a55b', label: 'Nemotron 3 Ultra 550B' },
+      { id: 'nvidia/nemotron-3-super-120b-a12b', label: 'Nemotron 3 Super 120B' },
+      { id: 'moonshotai/kimi-k3', label: 'Kimi K3' },
+      { id: 'z-ai/glm-5.3-flash', label: 'GLM 5.3 Flash' },
+      { id: 'google/gemma-4-31b-it', label: 'Gemma 4 31B' },
       { id: 'deepseek-ai/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
+      { id: 'mistralai/mistral-large-2-instruct', label: 'Mistral Large 2' },
+      { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', label: 'Nemotron 3 Nano Omni 30B', note: 'reasoning' },
     ],
   },
   {
@@ -79,12 +90,11 @@ export const PRESETS = [
     transport: 'openai',
     free: true,
     baseUrl: 'https://api.cerebras.ai/v1',
-    hint: 'Free developer tier with a fast open model.',
+    hint: 'Free developer tier. Shared Inference now serves only the two models below.',
     keyUrl: 'https://cloud.cerebras.ai',
     models: [
-      { id: 'llama-3.3-70b', label: 'Llama 3.3 70B' },
-      { id: 'llama3.1-8b', label: 'Llama 3.1 8B' },
-      { id: 'qwen-3-32b', label: 'Qwen 3 32B' },
+      { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', note: 'about 3000 tokens/s' },
+      { id: 'qwen-3.8-27b', label: 'Qwen 3.8 27B' },
     ],
   },
   {
@@ -93,12 +103,12 @@ export const PRESETS = [
     transport: 'openai',
     free: false,
     baseUrl: 'https://api.openai.com/v1',
-    hint: 'Paid. Falls back to gpt-4o-mini when no model is given.',
+    hint: 'Paid. These answer on /chat/completions; tool calling needs the Responses API.',
     keyUrl: 'https://platform.openai.com/api-keys',
     models: [
-      { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
-      { id: 'gpt-4o', label: 'GPT-4o' },
-      { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini' },
+      { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', note: 'near-Astra quality, lower cost' },
+      { id: 'gpt-6-luna', label: 'GPT-6 Luna', note: 'cheapest of the three' },
+      { id: 'gpt-6-astra', label: 'GPT-6 Astra', note: 'most capable, priciest' },
     ],
   },
   {
@@ -110,9 +120,9 @@ export const PRESETS = [
     hint: 'Paid tier, cheapest models included.',
     keyUrl: 'https://console.mistral.ai/api-keys',
     models: [
-      { id: 'mistral-small-latest', label: 'Mistral Small' },
-      { id: 'mistral-large-latest', label: 'Mistral Large' },
-      { id: 'open-mistral-nemo', label: 'Nemo' },
+      { id: 'mistral-medium-latest', label: 'Mistral Medium 3.5' },
+      { id: 'mistral-small-latest', label: 'Mistral Small 4' },
+      { id: 'mistral-large-latest', label: 'Mistral Large 4' },
     ],
   },
   {
@@ -121,11 +131,11 @@ export const PRESETS = [
     transport: 'openai',
     free: false,
     baseUrl: 'https://api.deepseek.com/v1',
-    hint: 'Paid, very cheap.',
+    hint: 'Paid, very cheap. deepseek-chat and deepseek-reasoner are retired.',
     keyUrl: 'https://platform.deepseek.com/api_keys',
     models: [
-      { id: 'deepseek-chat', label: 'DeepSeek Chat' },
-      { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner' },
+      { id: 'deepseek-flash', label: 'DeepSeek V4.1 Flash', note: '1M context' },
+      { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', note: '1M context' },
     ],
   },
   {
@@ -141,16 +151,21 @@ export const PRESETS = [
 /**
  * Gemini models, newest first, with the ones that answer under load noted.
  *
+ * Checked against the live `v1beta/models` list on 7 October 2026. Every id here
+ * must appear in that list, because an id Google has retired answers 404 and costs
+ * the user a whole run. `gemini-3.8-flash-lite` was in this table once and was not
+ * in the live list, so there is a test that re-checks the shape of it.
+ *
  * `fallback: true` marks a model to try when the requested one is unavailable.
  * Capacity on the flash tier is bursty and shared, so the ladder walks down these
  * rather than reporting failure the first time a flagship returns 503.
  */
 export const GEMINI_MODELS = {
   'gemini-3.8-flash': 'Current stable flagship. Busy at peak.',
-  'gemini-3.8-flash-lite': 'Cheaper sibling of the flagship.',
-  'gemini-3.5-flash-lite': 'Cheapest and fastest of the 3.x line.',
-  'gemini-3.5-flash': 'Legacy Flash, balanced speed and volume.',
   'gemini-3.7-flash': 'Previous-generation Flash, complex multi-step work.',
+  'gemini-3.6-flash': 'Mid-generation Flash, balanced speed and volume.',
+  'gemini-3.5-flash': 'Legacy Flash, balanced speed and volume.',
+  'gemini-3.5-flash-lite': 'Cheapest and fastest of the 3.x line.',
   'gemini-3.1-flash-lite': 'Frontier-class quality, fraction of the cost. Steadiest under load.',
   'gemini-3.1-pro-preview': 'Preview Pro. Highest capability, preview rate limits.',
   'gemini-2.5-flash': 'Older but very available. The safest free fallback.',
@@ -168,12 +183,12 @@ export const GEMINI_FALLBACKS = [
   'gemini-3.1-flash-lite',
   'gemini-2.5-flash',
   'gemini-3.5-flash-lite',
-  'gemini-3.8-flash-lite',
+  'gemini-3.6-flash',
 ];
 
 /** Live free-tier numbers, so a rate limit reads as advice rather than a failure. */
 export const LIMITS = {
-  gemini: 'Free tier: 20 requests per day per model. Exceeding it returns 429 with a retry-after in seconds.',
+  gemini: 'Free tier limits are set per project and reset at midnight Pacific. The exact numbers for a model are shown in AI Studio, and preview models get the tightest limits.',
   openrouter: 'Free models are rate limited per model and rotate often. A 429 here is usually temporary.',
 };
 

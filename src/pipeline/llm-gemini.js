@@ -14,8 +14,8 @@
  *
  * Both were needed in practice. On the free tier `gemini-3.8-flash` returned 503
  * "high demand" for structured requests while `gemini-3.1-flash-lite` answered, and
- * the daily quota is 20 requests *per model* — so a caller who picked the flagship
- * and hit its limit could still succeed on a different model.
+ * the free quota is charged per project and resets daily — so a caller who picked
+ * the flagship and hit its limit could still succeed on a different model.
  *
  * Docs: https://ai.google.dev/gemini-api/docs/text-generation
  */
