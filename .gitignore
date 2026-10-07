@@ -10,3 +10,4 @@ demo-output/
 public/_samples/
 *.png
 *.zip
+!docs/screenshots/*.png

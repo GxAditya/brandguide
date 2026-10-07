@@ -80,8 +80,7 @@ Three deliberately awkward sites. Nothing is special cased in the code.
 | **GOV.UK** | No framework, no `<h1>`, tokens behind a vendor prefix | 0.77 | 2 | GDS Transport |
 | **Patagonia** | Image led retail, typefaces only reachable through `var()` | 0.79 | 6 | Ridgeway Sans, Copernicus |
 
-Extracted values, all present in the committed `demo-output/` and checkable against
-the live sites:
+Extracted values, all checkable against the live sites:
 
 | | Primary | Body text | Heading face | Body copy contrast |
 | --- | --- | --- | --- | --- |
@@ -89,9 +88,9 @@ the live sites:
 | GOV.UK | `#1d70b8` from `--govuk-brand-colour` | `#0b0c0c` | GDS Transport | 19.59:1 AAA |
 | Patagonia | `#66b87d` (labelled `inferred`) | `#222222` | Ridgeway Sans | 15.91:1 AAA |
 
-Notion appears nowhere in the code and is covered by `demo-output/compare.json` at
-`#1313ba` with NotionInter, which is the evidence that the resolver is not tuned to
-the demo set.
+Notion appears nowhere in the code and was verified at `#1313ba` with NotionInter,
+which is the evidence that the resolver is not tuned to the demo set. Reproduce any
+of these by entering a brand in the UI.
 
 ## Local Setup
 
@@ -114,8 +113,6 @@ request as a header. It is never stored on the server.
 | `npm start` | Runs the server on port 3000 |
 | `npm run dev` | Same, with `node --watch` |
 | `npm test` | 215 tests, no network required |
-| `npm run demo` | Crawls three demo brands, writes every export to `demo-output/`, validates each guide against the schema. Needs `TINYFISH_API_KEY` in the environment |
-| `npm run shots` | Regenerates `docs/screenshots/` from saved demo output |
 
 ### Endpoints
 
@@ -339,8 +336,8 @@ Deeper detail, including the reasoning behind each decision, is in
   It lives in `localStorage`, falls back to memory when storage is refused (Safari
   private mode), and says so in the panel rather than pretending the save will
   outlive the tab.
-- `scripts/demo.mjs` is the one exception. It has no form to read from, so it takes
-  `TINYFISH_API_KEY` from the environment.
+- **A key never touches disk on the server.** There is no environment variable to
+  set and no config file to create.
 
 ### Why no framework and no dependencies
 
@@ -399,13 +396,11 @@ Read in this order if you want to understand the project properly:
 
 | Document | What it covers |
 | --- | --- |
-| [docs/TINYFISH.md](docs/TINYFISH.md) | How the read layer works, why Fetch and not a scraper, the two retry ladders, cost and rate limits |
+| [docs/PRD.md](docs/PRD.md) | The product requirement: problem, read layer, endpoints, accuracy strategy, UI design decisions |
+| [docs/TINYFISH.md](docs/TINYFISH.md) | How the read layer works in depth, why Fetch and not a scraper, the two retry ladders, cost and rate limits |
 | [docs/CRITERIA.md](docs/CRITERIA.md) | Each approval criterion mapped to the code and the tests that cover it |
-| [docs/SUBMISSION.md](docs/SUBMISSION.md) | Post drafts for the bounty submission |
-| [PRD.md](PRD.md) | The original plan, with every point where the build diverged marked in place |
-| [TASKS.md](TASKS.md) | The build log: what shipped, what was found along the way, and eight recorded deviations |
+| [docs/TASKS.md](docs/TASKS.md) | The build log: what shipped, what was found along the way, and nine recorded deviations |
 | [src/schema.js](src/schema.js) | The JSON Schema the output validates against. Enforces provenance, so an unverified asset cannot be represented |
-| [demo-output/](demo-output) | Committed evidence for three demo brands plus a three brand compare run |
 
 ### Source layout
 
@@ -420,7 +415,6 @@ src/
   export/         markdown, CSS, Tailwind, Style Dictionary, Figma, SVG
   server/         zero dependency HTTP server, credential handling, SSE
 public/           the UI, served as written with no build step
-scripts/          demo.mjs, screenshot.mjs
 test/             215 tests, no network required
 ```
 

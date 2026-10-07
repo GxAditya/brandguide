@@ -1,13 +1,10 @@
 <!DOCTYPE html>
 <!--
-  Local render harness. Not part of the app.
+  Local render harness. Not part of the app, and not used by it.
 
-  Loads real extraction output saved by scripts/demo.mjs and feeds it through the
-  exact render functions the live UI uses, so a screenshot shows the real render
-  path rather than a mock-up.
-
-    node scripts/demo.mjs            # produces demo-output/
-    node scripts/screenshot.mjs      # writes docs/screenshots/
+  Feeds a saved brand-guide JSON file through the exact render functions the live
+  UI uses, so a screenshot shows the real render path rather than a mock-up. Used
+  when regenerating docs/screenshots/.
 
   ?file=   path to a saved brand-guide.json (required)
   ?pages=N the guide length to compose

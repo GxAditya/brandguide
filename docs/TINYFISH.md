@@ -212,14 +212,15 @@ in the source copy.
 
 ## Reproducing it
 
+Enter any company name in the UI. The same pipeline runs and returns the same
+fields, and the provenance block in the response carries every TinyFish call with
+its latency, which is the audit trail this file describes.
+
+Or over HTTP, against a running server:
+
 ```bash
-TINYFISH_API_KEY=sk-tinyfish-... node scripts/demo.mjs
+curl -s -X POST http://localhost:3000/api/v1/brand-guide \
+  -H 'content-type: application/json' \
+  -H "x-brandkit-tinyfish-key: $TINYFISH_API_KEY" \
+  -d '{"input":"linear"}' | jq '.provenance'
 ```
-
-The demo script is the one place a key still comes from the environment: it has no
-settings panel to read from, and passing one on the command line would put it in
-the shell history of every demo run.
-
-The script prints every TinyFish call with its latency as it happens, crawls the
-three demo brands plus the three-brand compare set, then validates each guide
-against the JSON Schema in `src/schema.js`. Output lands in `demo-output/`.

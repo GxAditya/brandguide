@@ -1,14 +1,14 @@
 # TASKS — BrandKit
 
-Derived from `PRD.md`. Ordered by dependency. This is the build log: it records
-what shipped and what was found along the way, including the deviations at the
-end. For what the product *is*, read the README.
+Derived from [PRD.md](PRD.md). Ordered by dependency. This is the build log: it
+records what shipped and what was found along the way, including the deviations at
+the end. For what the product *is*, read the [README](../README.md).
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ---
 
-## Read this first: four places the plan changed
+## Read this first: five places the plan changed
 
 1. **Two endpoints were planned and never shipped.** `POST /api/v1/identity` and
    `POST /api/v1/voice` (T4.2, T4.3) are not registered in `src/server/index.js`
@@ -23,6 +23,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
    each phase landed.
 4. **The CLI was built and then removed.** There is no `src/cli.js` and no
    `brandkit` bin entry. See deviation 9.
+5. **The demo and screenshot scripts were removed too**, so nothing regenerates
+   `docs/screenshots/`. The figures in the README are reproducible by entering a
+   brand in the UI, and schema self validation is covered by `test/units.test.js`
+   rather than by a demo run.
 
 ---
 
@@ -310,5 +314,5 @@ The single scrolling sheet became a paged document. Replaces T7.4 and T7.5.
    The product is a frontend and a backend over HTTP, and a second entry point meant
    two sets of provider resolution rules to keep in step. They had already drifted:
    the CLI could not infer a provider from a bare key while the HTTP path treated
-   one as Gemini. `scripts/demo.mjs` and `scripts/screenshot.mjs` are the remaining
-   command line surface, and both are tooling rather than a user interface.
+   one as Gemini. The demo and screenshot tooling went with it, leaving three npm
+   scripts: `start`, `dev`, and `test`.

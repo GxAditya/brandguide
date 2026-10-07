@@ -88,7 +88,7 @@ Six mechanisms, each covered by tests:
 6. **Confidence is measured** — per section, from how many independent sources
    agreed. Inferred values are labelled `inferred`.
 
-Spot-checkable against the live sites, from the committed run in `demo-output/`:
+Spot-checkable against the live sites:
 
 | | Linear | GOV.UK | Patagonia |
 | --- | --- | --- | --- |
@@ -103,8 +103,8 @@ hairline panel 1.95:1. The guide reports those failures rather than hiding them.
 
 ### 3. Works for any site rather than a hardcoded few
 
-Nothing in `src/` names a brand, a domain or a selector. The demo list in
-`scripts/demo.mjs` is data, and the pipeline is identical for all three.
+Nothing in `src/` names a brand, a domain or a selector. The demo brand list is
+data, not code, and the pipeline is identical for every input.
 
 The three demo sites were chosen to break naive extractors:
 
@@ -130,9 +130,9 @@ for n in linear notion stripe patagonia "GOV.UK"; do
 done
 ```
 
-The committed `demo-output/compare.json` covers a fourth brand, **Notion**, which
-appears nowhere in the code, at `#1313ba` with NotionInter. That is the evidence
-the resolver is not tuned to the demo set.
+A fourth brand, **Notion**, appears nowhere in the code and was verified at
+`#1313ba` with NotionInter. That is the evidence the resolver is not tuned to the
+demo set.
 
 ### 4. Output is structured and reusable by other tools
 
@@ -140,8 +140,9 @@ JSON Schema for the guide lives in `src/schema.js` and is exported as
 `BRAND_GUIDE_SCHEMA`. It **enforces provenance**: a logo object is invalid unless
 `verifiedBy` is `tinyfish-fetch`, so an unverified asset cannot be represented.
 
-`TINYFISH_API_KEY=... node scripts/demo.mjs` validates each real extraction
-against that schema, and all three pass.
+The schema validates its own output, and the tests prove both directions:
+`test/units.test.js:391` asserts a well formed guide passes, and `:412` asserts a
+logo with `verifiedBy: "guesswork"` is rejected by name.
 
 Seven export formats, all generated from the same token tree:
 
