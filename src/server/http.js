@@ -50,7 +50,8 @@ export function createApp(routes, opts = {}) {
 
     // The API is public and read-only; allow any origin to call it. Credentials
     // ride in headers, so those have to be named on the preflight too.
-    if (url.pathname.startsWith('/api/') || req.method === 'OPTIONS') {      res.setHeader('Access-Control-Allow-Origin', '*');
+    if (url.pathname.startsWith('/api/') || req.method === 'OPTIONS') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', `Content-Type, ${CRED_HEADER_LIST}`);
     }

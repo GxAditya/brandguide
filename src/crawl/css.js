@@ -1,26 +1,20 @@
-/**
- * Stylesheet reading.
- *
- * Fetch returns a .css URL as raw text, so real colour and type declarations come
- * through the same channel as everything else. Coverage is the hard part: a framework
- * site may declare 40+ stylesheets with opaque build hashes, so we read broadly
- * rather than guess which one holds the tokens.
- */
+// Fetch returns a .css URL as raw text, so real colour and type declarations come
+// through the same channel as everything else. Coverage is the hard part: a framework
+// site may declare 40+ stylesheets with opaque build hashes, so read broadly rather
+// than guess which one holds the tokens.
 
 const MAX_BYTES_PER_SHEET = 2_000_000;
 
-/** Filenames that usually hold the global token set, by convention across frameworks. */
+// Filenames that usually hold the global token set, by convention across frameworks.
 const GLOBAL_HINTS = /(global|globals|theme|tokens|vars|variables|custom-props|palette|main|index|app|styles|tailwind|base|root|primitives|design-system)/i;
 
 const VENDOR_HINTS = /(^|\/)(vendor|node_modules|bootstrap|foundation|bulma|preflight|normalize|modernizr|polyfill|animate|swiper|slick|owl)[-./]/i;
 
-/** Frameworks whose utility classes are noise for brand extraction. */
+// Frameworks whose utility classes are noise for brand extraction.
 const UTILITY_ONLY = /(tailwind|bootstrap|bulma|foundation|animate|swiper|slick|owlcarousel|lodash)/i;
 
-/**
- * Rank stylesheet URLs so the most likely token carriers are fetched first; `cap`
- * then decides how far down the list we get.
- */
+// Ranks stylesheet URLs so the likeliest token carriers are fetched first, and cap
+// decides how far down the list we get.
 export function prioritiseStylesheets(urls) {
   return (urls || [])
     .filter((url) => /\.(css)(\?|$)/i.test(url) || !/\.[a-z0-9]{2,5}(\?|$)/i.test(url))
@@ -30,15 +24,15 @@ export function prioritiseStylesheets(urls) {
       if (GLOBAL_HINTS.test(path)) score += 40;
       if (VENDOR_HINTS.test(path)) score -= 30;
       if (UTILITY_ONLY.test(path)) score -= 18;
-      // Framework build hashes look like `/pcGZUK31.css`; a readable name is a
-      // weak signal that the file is hand-authored and brand-specific.
+      // Framework build hashes look like /pcGZUK31.css. A readable name is a weak
+      // signal that the file is hand authored and brand specific.
       if (/\/[a-z0-9_-]{6,10}\.[a-f0-9]{6}\.css$/i.test(path)) score -= 4;
-      // Earlier in the <head> usually means more foundational.
-      score += Math.max(0, 10 - index);      return { url, vendor: VENDOR_HINTS.test(path), utility: UTILITY_ONLY.test(path), score, index };
+      // Earlier in the head usually means more foundational.
+      score += Math.max(0, 10 - index);
+      return { url, vendor: VENDOR_HINTS.test(path), utility: UTILITY_ONLY.test(path), score, index };
     })
     .sort((a, b) => b.score - a.score);
 }
-
 
 export async function fetchStylesheets(client, stylesheetUrls, opts = {}) {
   const cap = opts.cap ?? 24;
@@ -80,10 +74,11 @@ export async function fetchStylesheets(client, stylesheetUrls, opts = {}) {
     .filter((e) => e.error !== 'empty_content')
     .map((e) => ({ url: e.url, reason: e.error }));
 
-  // A partial read must never be silent. Brand tokens and @font-face rules are
-  // scattered across build-hashed files, so a missing third of them is the
-  // difference between a full palette and no palette.
-  const missing = chosen.length - new Set(sheets.map((s) => s.url)).size;  if (missing > 0) {
+  // A partial read must never be silent. Tokens and @font-face rules are scattered
+  // across build hashed files, so a missing third of them is the difference between a
+  // full palette and no palette.
+  const missing = chosen.length - new Set(sheets.map((s) => s.url)).size;
+  if (missing > 0) {
     skipped.push({ url: `${missing} stylesheet(s)`, reason: 'did not come back from fetch' });
   }
 

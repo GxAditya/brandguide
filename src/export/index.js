@@ -1,18 +1,10 @@
-/**
- * Output formats.
- *
- * The point of a structured brand guide is that something else can consume it, so
- * these renderers are deliberately literal: no clever transformations that would
- * need undoing on the other side.
- */
+// Output formats. A structured guide is only useful if something else can consume it,
+// so these renderers are literal: no clever transformation that needs undoing.
 
 import { buildDesignTokens, toCss, toTailwind, toStyleDictionary, toFigmaVariables } from '../lib/tokens.js';
 
 export const FORMATS = ['json', 'markdown', 'css', 'tailwind', 'styledictionary', 'figma', 'svg'];
 
-/**
- * @returns {{ body: string, contentType: string, filename: string }}
- */
 export function render(format, guide) {
   const tokens = buildDesignTokens({
     colors: guide.colors || {},
@@ -58,7 +50,8 @@ function slug(guide) {
   const raw = guide.identity?.domain || guide.identity?.name || guide.domain || guide.url || guide.subject || 'brand';
   try {
     // A full URL makes a better filename stem than a long path.
-    const host = new URL(String(raw).includes('//') ? String(raw) : `https://${raw}`).hostname;    return host.replace(/^www\./, '').replace(/[^a-z0-9.]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+    const host = new URL(String(raw).includes('//') ? String(raw) : `https://${raw}`).hostname;
+    return host.replace(/^www\./, '').replace(/[^a-z0-9.]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
   } catch {
     return String(raw).replace(/[^a-z0-9.]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'brand';
   }
@@ -66,7 +59,7 @@ function slug(guide) {
 
 // --- markdown --------------------------------------------------------------
 
-/** Deck-ready: swatch tables, a specimen block, and a provenance footnote. */
+// Deck ready: swatch tables, a specimen block, and a provenance footnote.
 export function toMarkdown(guide) {
   const { identity, colors, typography, logos, voice, messaging, confidence, provenance } = guide;
   const out = [];
@@ -206,7 +199,7 @@ export function toMarkdown(guide) {
   return out.join('\n');
 }
 
-/** A single-file swatch sheet, downloadable straight into a deck. */
+// A single file swatch sheet, downloadable straight into a deck.
 export function toSwatchSvg(guide) {
   const colors = guide.colors || { tokens: [], roles: {} };
   const tokens = colors.tokens?.length ? colors.tokens : Object.entries(colors.roles || {}).filter(([, v]) => typeof v === 'string').map(([role, hex]) => ({ hex, name: role }));

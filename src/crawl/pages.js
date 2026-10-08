@@ -126,7 +126,8 @@ export async function fetchPage(client, url) {
   if (!page) {
     // A per-URL failure (bot wall, 404, timeout) is data, not an exception. Keep
     // both the raw code and a readable message so callers can branch on the code.
-    const raw = errors[0];    const code = raw?.error || 'UNKNOWN';
+    const raw = errors[0];
+    const code = raw?.error || 'UNKNOWN';
     return {
       url: raw?.url || url,
       ok: false,

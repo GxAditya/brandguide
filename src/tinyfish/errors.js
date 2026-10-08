@@ -1,4 +1,4 @@
-/** Friendly explanations for TinyFish per-URL codes, so a failure reads as advice, not a stack trace. */
+// Friendly explanations for TinyFish per URL codes, so a failure reads as advice.
 const MESSAGES = {
   target_http_error: 'The site returned an error status. It may be blocking automated requests.',
   page_not_found: 'That page does not exist (404).',
@@ -24,12 +24,9 @@ const MESSAGES = {
   HTTP_429: 'TinyFish rate limit reached (429). Wait a moment and retry.',
 };
 
-/**
- * Request-level failures: our key or the connection is broken, so *no* site can be
- * read. These must never be reported as "this site blocks automated visitors". Plain
- * `timeout` is absent — it is TinyFish's per-URL code; our own aborts use
- * UPSTREAM_TIMEOUT.
- */
+// Request level failures, where our key or the connection is broken and no site can be
+// read. Never report these as "this site blocks automated visitors". Plain timeout is
+// absent because it is TinyFish's per URL code, and our own aborts use UPSTREAM_TIMEOUT.
 const REQUEST_LEVEL = new Set([
   'MISSING_API_KEY',
   'INVALID_API_KEY',
@@ -46,10 +43,6 @@ export function isRequestLevel(code) {
   return REQUEST_LEVEL.has(String(code || '').toUpperCase());
 }
 
-/**
- * @param {string} code
- * @param {{url?: string, status?: number, candidate_selectors?: string[]}} [info]
- */
 export function explainError(code, info = {}) {
   const base = MESSAGES[code] || 'That URL could not be read.';
   const bits = [];
@@ -59,7 +52,8 @@ export function explainError(code, info = {}) {
   let out = base;
   if (bits.length) out += ` (${bits.join(' · ')})`;
 
-  if (code === 'selector_not_matched' && info.candidate_selectors?.length) {    out += ` Try selectors such as: ${info.candidate_selectors.slice(0, 4).join(', ')}.`;
+  if (code === 'selector_not_matched' && info.candidate_selectors?.length) {
+    out += ` Try selectors such as: ${info.candidate_selectors.slice(0, 4).join(', ')}.`;
   }
   return out;
 }

@@ -1,11 +1,7 @@
-/**
- * The brand benchmark. Extracts the same vectors from two to five live brands and
- * diffs them: CIEDE2000 palette distance, font overlap, cosine distance between tone
- * vectors, and Jaccard overlap of message vocabulary.
- *
- * Not a leaderboard. A positioning read: which parts of this brand are its own, and
- * where it looks like everybody else.
- */
+// Extracts the same vectors from two to five live brands and diffs them: CIEDE2000
+// palette distance, font overlap, cosine distance between tone vectors, and Jaccard
+// overlap of message vocabulary. Not a leaderboard. A positioning read: which parts of
+// this brand are its own, and where it looks like everybody else.
 
 import { collect } from './collect.js';
 import { resolveFromSearch } from '../resolve/domain.js';
@@ -19,7 +15,6 @@ import { llmInfo } from './llm.js';
 
 const MAX_BRANDS = 5;
 
-
 export async function compareBrands(client, brand, competitors, opts = {}) {
   const names = [brand, ...competitors]
     .map((n) => String(n || '').trim())
@@ -32,8 +27,7 @@ export async function compareBrands(client, brand, competitors, opts = {}) {
     throw err;
   }
 
-  // Resolve every input to a domain first, so a typo fails fast before we spend a
-  // minute of crawl budget on it.
+  // Resolve every input to a domain first, so a typo fails before we spend a crawl.
   const resolved = [];
   for (const name of names) {
     try {
@@ -109,7 +103,7 @@ export async function compareBrands(client, brand, competitors, opts = {}) {
   };
 }
 
-/** The comparable subset of a brand. */
+// The comparable subset of a brand.
 async function profileBrand(client, entry, opts) {
   const crawl = await collect(client, entry.url, { ...opts, depth: opts.depth || 'quick' });
 
@@ -188,7 +182,7 @@ function diffBrands(subject, others) {
   };
 }
 
-/** Averaged, with the closest pair reported: shared colour is the strongest signal of sameness. */
+// Averaged, with the closest pair reported: shared colour is the strongest signal of sameness.
 function paletteDistance(a, b) {
   if (!a.length || !b.length) return { average: null, closest: null, note: 'One brand had no readable palette.' };
 
@@ -235,7 +229,7 @@ function fontOverlap(a, b) {
   };
 }
 
-/** Cosine distance between two tone vectors, plus the axis that diverges most. */
+// Cosine distance between two tone vectors, plus the axis that diverges most.
 function toneDistance(a, b) {
   if (!a || !b) return { distance: null, worstAxis: null, note: 'One brand had too little prose to measure.' };
 
@@ -284,16 +278,13 @@ function termOverlap(a, b) {
   };
 }
 
-/**
- * Blend the four distances into one 0-100 distinctiveness score.
- * Weights reflect which signals a viewer actually notices: colour and type
- * register before vocabulary.
- */
+// Blends the four distances into one 0 to 100 distinctiveness score. The weights follow
+// what a viewer notices: colour and type register before vocabulary.
 function distinctivenessScore({ palette, fonts, tone, terms }) {
   const parts = [];
 
-  // The driver name rides on the part rather than being recovered from its
-  // weight, so 'type' and 'voice' stay distinguishable.
+  // The signal name rides on the part rather than being recovered from its weight,
+  // so type and voice stay distinguishable.
   if (palette.average !== null) parts.push({ signal: 'palette', value: Math.min(100, palette.average * 2.2), weight: 0.4 });
   if (fonts.jaccard !== null) parts.push({ signal: 'type', value: (1 - fonts.jaccard) * 100, weight: 0.25 });
   if (tone.distance !== null) parts.push({ signal: 'voice', value: Math.min(100, tone.distance * 100), weight: 0.25 });
@@ -313,7 +304,7 @@ function distinctivenessScore({ palette, fonts, tone, terms }) {
   };
 }
 
-/** The narrative read across the set. */
+// The narrative read across the set.
 function buildPositioning(subject, all) {
   if (all.length < 2) return null;
 

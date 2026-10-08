@@ -1,11 +1,8 @@
-/**
- * Logo extraction and verification.
- *
- * Candidates come from real signals (icon links, og:image, manifest icons,
- * conventional favicon paths), then each is read back through TinyFish Fetch: the
- * difference between handing a marketer a dead link and an asset they can drop in a
- * deck is the whole job.
- */
+// Logo extraction and verification.
+// Candidates come from real signals (icon links, og:image, manifest icons,
+// conventional favicon paths), then each is read back through TinyFish Fetch: the
+// difference between handing a marketer a dead link and an asset they can drop in a
+// deck is the whole job.
 
 import { verifyAssets, conventionalIconUrls } from '../crawl/assets.js';
 import { attachSvgSource } from './svg.js';
@@ -25,7 +22,7 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
   const origin = assetOrigin(pageUrl);
   const candidates = [];
 
-  // --- Manifest icons: the most deliberate statement of "this is my logo" ----
+  // Manifest icons are the most deliberate statement of "this is my logo".
   for (const icon of manifest?.icons || []) {
     const w = parseInt((icon.sizes || '').split(' ')[0], 10) || 0;
     candidates.push({
@@ -37,7 +34,6 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
     });
   }
 
-  // --- <link rel=icon> and apple-touch-icon --------------------------------
   for (const icon of head?.icons || []) {
     const rel = (icon.rel || '').toLowerCase();
     const hint = formatHint(icon.url);
@@ -60,7 +56,6 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
     candidates.push({ url: icon.url, kind: rel.includes('apple-touch') ? 'logo' : 'icon', score, reason, declaredSize: icon.sizes || null });
   }
 
-  // --- og:image ------------------------------------------------------------
   if (head?.ogImage) {
     candidates.push({
       url: head.ogImage,
@@ -70,7 +65,6 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
     });
   }
 
-  // --- Image URLs from the page body ---------------------------------------
   for (const url of pageImageLinks.slice(0, 60)) {
     if (!/\.(svg|png|webp|jpe?g|gif)(\?|$)/i.test(url)) continue;
     const hint = formatHint(url);
@@ -81,7 +75,7 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
       url,
       kind: 'logo',
       // Deliberately below head- and manifest-declared assets: a page image whose
-      // *filename* says "logo" is often a campaign mark, which is how Patagonia's
+      // filename says "logo" is often a campaign mark, which is how Patagonia's
       // one-percent-logo.svg outscored its actual brand assets.
       score: looksLikeLogo ? 48 + hint.bonus : 18,
       reason: looksLikeLogo
@@ -90,12 +84,11 @@ export async function extractLogos({ head, manifest, pageUrl, pageImageLinks = [
     });
   }
 
-  // --- Conventional paths, for sites with a sparse head ---------------------
+  // Conventional paths, for sites with a sparse head.
   for (const candidate of conventionalIconUrls(pageUrl)) {
     candidates.push({ ...candidate, score: candidate.score + 8, reason: `${candidate.reason} (lower confidence than a declared icon)` });
   }
 
-  // --- Rank, dedupe, verify -------------------------------------------------
   const ranked = rankCandidates(candidates);
   const shortlist = ranked.slice(0, 10);
   const { verified, rejected } = await verifyAssets(client, shortlist);

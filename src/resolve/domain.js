@@ -1,8 +1,6 @@
-/**
- * Name -> domain, via TinyFish Search. Given "Vercel" we need the official website,
- * not a listicle or a LinkedIn profile, so candidates are ranked on signals generic
- * to any company rather than a hardcoded brand table.
- */
+// Name to domain, via TinyFish Search. Given "Vercel" we need the official website, not
+// a listicle or a profile page, so candidates are ranked on signals generic to any
+// company rather than a hardcoded brand table.
 
 import { normaliseUrl } from './input.js';
 
@@ -15,10 +13,8 @@ const NON_CANONICAL = [
   /\/(tag|tags|category|categories|author|authors|p|posts?|page|pages|search)\//i,
 ];
 
-/**
- * Platforms that host a company's profile but are not its website — a page *about*
- * the brand, and the result most likely to be blocked by bot protection.
- */
+// Platforms that host a company profile but are not its website: a page about the
+// brand, and the result most likely to be behind bot protection.
 const PROFILE_PLATFORMS = [
   /(^|\.)(linkedin\.com|facebook\.com|instagram\.com|x\.com|twitter\.com|youtube\.com|tiktok\.com|pinterest\.com|reddit\.com)$/i,
   /(^|\.)(crunchbase\.com|g2\.com|capterra\.com|trustpilot\.com|glassdoor\.com|indeed\.com|zoominfo\.com|apollo\.io|clearbit\.com)$/i,
@@ -31,12 +27,9 @@ const PROFILE_PLATFORMS = [
   /(^|\.)(wikipedia\.org|youtube\.com|docs\.google\.com|support\.google\.com)$/i,
 ];
 
-/** Path shapes that mark a hosted profile rather than a company's own page. */
+// Path shapes that mark a hosted profile rather than a company's own page.
 const PROFILE_PATHS = /\/(company|companies|org|organisation|profile|profiles|pages?|posts?|pub|user|users|showcase)\//i;
 
-/**
- * @returns {Promise<{ url: string, resolvedBy: 'search', candidates: object[], reasoning: string }>}
- */
 export async function resolveFromSearch(client, name) {
   const query = `${name} official website`;
   const response = await client.search(query, {
@@ -57,8 +50,8 @@ export async function resolveFromSearch(client, name) {
   return {
     url: best.url,
     resolvedBy: 'search',
-    // Score and reasoning stay on the candidate: that is the evidence for why one
-    // domain was preferred, and a reviewer should see it rather than trust it.
+    // Score and reasoning stay on the candidate as the evidence for why this domain won,
+    // so a reviewer sees it rather than trusting it.
     candidates: candidates.slice(0, 5),
     reasoning: best.reasoning,
   };
@@ -79,9 +72,9 @@ function rankCandidates(results, name) {
 
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
-    // Scoring works on URL parts, never the raw string: a result carrying
-    // `?srsltid=...` used to be scored as though the tracking parameter were a
-    // path segment, promoting a deep localised page over the homepage.
+    // Scoring works on URL parts, never the raw string. A result carrying a tracking
+    // parameter used to be scored as though the parameter were a path segment, which
+    // promoted a deep localised page over the homepage.
     const path = parsed.pathname.replace(/\/index\.html?$/i, '/');
     const barePath = path === '/' ? '' : path.replace(/^\/|\/$/g, '');
 
@@ -128,16 +121,16 @@ function rankCandidates(results, name) {
     }
 
     // A subdomain is a department, not a company. Searching "patagonia" returns
-    // `wornwear.patagonia.com` — a resale line with its own dark palette — above
-    // `patagonia.com` itself, purely because "patagonia" is in its hostname.
+    // wornwear.patagonia.com, a resale line with its own dark palette, above patagonia.com
+    // itself, only because the brand name is in its hostname.
     const labels = host.replace(/^www\d?\./, '').split('.').filter(Boolean);
     if (labels.length > 2) {
       score -= 35;
       reasons.push('a subdomain, not the brand main site');
     }
 
-    // A hosted profile is rejected outright rather than merely demoted: a LinkedIn
-    // page will usually fail to render for an anonymous crawler anyway.
+    // A hosted profile is rejected outright rather than demoted. A LinkedIn page usually
+    // fails to render for an anonymous crawler anyway.
     if (PROFILE_PLATFORMS.some((re) => re.test(host))) {
       rejected = true;
       reasons.push(`${host} hosts third-party profiles, not a brand site`);

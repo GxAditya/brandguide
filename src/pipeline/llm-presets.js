@@ -1,23 +1,13 @@
-/**
- * Provider presets for the narration layer.
- *
- * Bring-your-own-key means someone has to type a base URL, and a mistyped one is
- * the single most likely reason a free key "doesn't work". These remove the typing:
- * pick a provider, get its base URL and a model known to be live today.
- *
- * Every entry here was checked against the provider's own models endpoint rather
- * than written from memory, because model ids rotate constantly. `free` marks a
- * tier that needs no payment method, which is what makes a preset worth having.
- *
- * Last checked 7 October 2026. Sources per provider: OpenRouter, NVIDIA NIM and
- * Gemini were read from their live model list endpoints; Groq, Cerebras and
- * DeepSeek from their published docs; OpenAI and Mistral from their model pages.
- * A stale id here is a failed run for the person who pasted a key, so re-check
- * rather than trust this file.
- *
- * Gemini is not in this table because it does not speak the Chat Completions shape.
- * It has its own transport and lives in llm-provider.js.
- */
+// Pick a provider, get its base URL and a model known to be live, so nobody has to
+// type a URL that a typo would break. free marks a tier that needs no payment method.
+//
+// Checked 7 October 2026. OpenRouter, NVIDIA NIM and Gemini were read from their live
+// model list endpoints; Groq, Cerebras and DeepSeek from their docs; OpenAI and
+// Mistral from their model pages. A stale id here is a failed run for the person who
+// pasted a key, so re-check rather than trust this file.
+//
+// Gemini is not in this table because it does not speak the Chat Completions shape.
+// It has its own transport, in llm-provider.js.
 
 export const PRESETS = [
   {
@@ -37,8 +27,8 @@ export const PRESETS = [
     hint: 'One key, many models. Free models end in :free and change often — the ones below are live now.',
     keyUrl: 'https://openrouter.ai/keys',
     models: [
-      // The router goes first on purpose: it resolves to whatever free model has
-      // capacity, so this preset cannot go stale the way a pinned id does.
+      // The router resolves to whatever free model has capacity, so this preset cannot
+      // go stale the way a pinned id does.
       { id: 'openrouter/free', label: 'Any free model', note: 'router, never goes stale' },
       { id: 'nvidia/nemotron-3-super-120b-a12b:free', label: 'Nemotron 3 Super 120B' },
       { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', label: 'Nemotron 3 Ultra 550B' },
@@ -148,18 +138,8 @@ export const PRESETS = [
   },
 ];
 
-/**
- * Gemini models, newest first, with the ones that answer under load noted.
- *
- * Checked against the live `v1beta/models` list on 7 October 2026. Every id here
- * must appear in that list, because an id Google has retired answers 404 and costs
- * the user a whole run. `gemini-3.8-flash-lite` was in this table once and was not
- * in the live list, so there is a test that re-checks the shape of it.
- *
- * `fallback: true` marks a model to try when the requested one is unavailable.
- * Capacity on the flash tier is bursty and shared, so the ladder walks down these
- * rather than reporting failure the first time a flagship returns 503.
- */
+// Newest first. Checked against the live v1beta/models list on 7 October 2026: every
+// id here must appear in it, because a retired id answers 404 and costs a whole run.
 export const GEMINI_MODELS = {
   'gemini-3.8-flash': 'Current stable flagship. Busy at peak.',
   'gemini-3.7-flash': 'Previous-generation Flash, complex multi-step work.',
@@ -171,14 +151,9 @@ export const GEMINI_MODELS = {
   'gemini-2.5-flash': 'Older but very available. The safest free fallback.',
 };
 
-/**
- * Tried in order when the caller's model is throttled, gone, or over capacity.
- *
- * Ordered by measured availability rather than by capability: on the free tier the
- * cheapest, oldest models answer most reliably, and a slightly plainer paragraph
- * beats no paragraph at all. Each entry must also exist in GEMINI_MODELS above, which
- * the tests assert, so the 404 message can list them.
- */
+// Ordered by measured availability, not capability: on the free tier the cheapest
+// models answer most reliably, and a plainer paragraph beats no paragraph. Each entry
+// must also be in GEMINI_MODELS, which the tests assert.
 export const GEMINI_FALLBACKS = [
   'gemini-3.1-flash-lite',
   'gemini-2.5-flash',
@@ -186,7 +161,7 @@ export const GEMINI_FALLBACKS = [
   'gemini-3.6-flash',
 ];
 
-/** Live free-tier numbers, so a rate limit reads as advice rather than a failure. */
+// Live free tier numbers, so a rate limit reads as advice rather than a failure.
 export const LIMITS = {
   gemini: 'Free tier limits are set per project and reset at midnight Pacific. The exact numbers for a model are shown in AI Studio, and preview models get the tightest limits.',
   openrouter: 'Free models are rate limited per model and rotate often. A 429 here is usually temporary.',

@@ -1,11 +1,8 @@
-/**
- * Optional LLM interpretation layer. TinyFish reads the web; it does not write.
- *
- * Three rules, enforced here rather than in a prompt comment: the model sees only a
- * compact fact sheet, never raw HTML; its output is parsed into a fixed shape stored
- * under `narrative`, where it cannot overwrite any measured value; and any sentence
- * without a supporting source quote is dropped.
- */
+// Optional interpretation layer. TinyFish reads the web, it does not write.
+// Three rules are enforced here, not in a prompt: the model sees only a compact fact
+// sheet, never raw HTML; its output is parsed into a fixed shape stored under
+// narrative, where it cannot overwrite a measured value; and a sentence without a
+// supporting quote from the site is dropped.
 
 import { clampPages, pillarsForBudget } from '../lib/page-budget.js';
 import { resolveLlm } from './llm-provider.js';
@@ -23,11 +20,8 @@ export function llmConfigured(creds) {
   return resolveLlm(creds).configured;
 }
 
-/**
- * What the layer is using, for the health endpoint and the startup banner. A
- * provider requested but unable to work reports its `problem` rather than looking
- * unconfigured: "unset" and "set wrong" need different fixes.
- */
+// What the layer is using. A provider that cannot work reports its problem rather than
+// looking unconfigured, because unset and set wrong need different fixes.
 export function llmInfo(creds) {
   const resolved = resolveLlm(creds);
 
@@ -50,10 +44,8 @@ export function llmInfo(creds) {
   };
 }
 
-/**
- * Build the compact fact sheet the model is allowed to see.
- * Deliberately excludes raw page HTML and any value already stated as measured.
- */
+// The compact fact sheet the model may see. No raw HTML, and nothing already measured
+// that it could restate wrongly.
 function buildContext({ identity, voice, messaging, colors, typography }) {
   const headlines = (messaging.headlines || []).slice(0, 20).map((h) => `- ${h.text}`);
   const signal = (voice.signalSentences || []).slice(0, 10).map((s) => `- ${s.text}`);
@@ -112,10 +104,8 @@ Return ONLY valid JSON with this exact shape:
   "watchOuts": ["Two specific traps to avoid in this voice."]
 }`;
 
-/**
- * The budget is part of the instruction, not a filter applied afterwards. Overshooting
- * costs a little token spend, never accuracy: the sanitiser drops the unevidenced.
- */
+// The budget is part of the instruction, not a filter applied after. Overshooting costs
+// a little token spend and never accuracy, because the sanitiser drops the unevidenced.
 function systemPrompt(pages, pillarCount) {
   return `${SYSTEM_RULES}
 
@@ -136,12 +126,6 @@ function extractJson(text) {
   }
 }
 
-/**
- * @param {object} facts { identity, voice, messaging, colors, typography }
- * @param {{ pages?: number, creds?: object }} [opts] the requested guide length and
- *   the caller's own LLM credentials
- * @returns {Promise<{ narrative: object|null, meta: object }>}
- */
 export async function narrate(facts, opts = {}) {
   const config = resolveLlm(opts.creds);
 
@@ -207,7 +191,7 @@ export async function narrate(facts, opts = {}) {
   };
 }
 
-/** Force the model's output into the agreed shape. Anything unverifiable goes. */
+// Forces the output into the agreed shape. Anything unverifiable goes.
 function sanitise(parsed, facts, pillarCount = 4) {
   const str = (v, max = 400) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 

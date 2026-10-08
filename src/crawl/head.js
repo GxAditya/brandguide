@@ -1,12 +1,7 @@
-/**
- * `<head>` extraction.
- *
- * The single most important trick in this project: TinyFish Fetch's default HTML
- * output strips <head>, <style> and <link>. Scoping the fetch to
- * `include_selectors: ["head"]` returns the head verbatim instead, which gives us
- * og:*, twitter:*, theme-color, every stylesheet URL, icon links and the web app
- * manifest without a single direct HTTP request.
- */
+// The single most important trick in this project: Fetch strips head, style and link
+// from its default HTML output. Scoping the fetch to include_selectors: ["head"]
+// returns the head verbatim, which gives og:*, twitter:*, theme-color, every
+// stylesheet URL, the icon links, and the web app manifest with no direct HTTP request.
 
 const META_RE = /<meta\s+([^>]*?)\/?>/gi;
 const LINK_RE = /<link\s+([^>]*?)\/?>/gi;
@@ -42,7 +37,6 @@ function safeCharCode(code) {
     return '';
   }
 }
-
 
 export function parseHead(headHtml, baseUrl) {
   const metas = {};
@@ -112,9 +106,7 @@ export function parseHead(headHtml, baseUrl) {
   };
 }
 
-/**
- * Fetch and parse a page's <head> via TinyFish Fetch.
- */
+// Fetches and parses a page head through Fetch.
 export async function fetchHead(client, url) {
   const { results, errors } = await client.fetchContent([url], {
     format: 'html',

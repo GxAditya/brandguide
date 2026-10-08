@@ -1,10 +1,6 @@
-/**
- * The full brand guide.
- *
- * Composes every extractor into the versioned guide object, then scores how much
- * to trust it. The confidence score is derived from how many independent sources
- * agreed on each section, so a guide with a missing stylesheet says so.
- */
+// Composes every extractor into the versioned guide object, then scores how much to
+// trust it. Confidence comes from how many independent sources agreed on each section,
+// so a guide with a missing stylesheet says so.
 
 import { collect } from './collect.js';
 import { extractIdentity } from '../extract/identity.js';
@@ -93,7 +89,7 @@ export async function buildBrandGuide(client, input, opts = {}) {
   };
 }
 
-/** Per-section confidence, derived from how the section was built. */
+// Per section confidence, derived from how the section was built.
 function scoreConfidence({ crawl, logos, colors, typography, voice, messaging, identity }) {
   const bySection = {};
 
@@ -148,7 +144,7 @@ function scoreConfidence({ crawl, logos, colors, typography, voice, messaging, i
   };
 }
 
-/** Every TinyFish call that produced this guide, with timing. */
+// Every TinyFish call that produced this guide, with timing.
 function buildProvenance(client, crawl) {
   return {
     tinyfish: {

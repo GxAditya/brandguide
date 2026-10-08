@@ -1,8 +1,6 @@
-/**
- * Input normalisation: turn whatever the caller typed into either a URL or a
- * company name to hand to TinyFish Search. No brand list, no TLD list, no
- * hardcoded domains — the only knowledge here is about URL *shape*.
- */
+// Turns whatever the caller typed into a URL or a company name for TinyFish Search.
+// No brand list, no TLD list, no hardcoded domain. The only knowledge here is the shape
+// of a URL.
 
 const PRIVATE_HOST_PATTERNS = [
   /^localhost$/i,
@@ -23,7 +21,7 @@ const STRIPPED_SUFFIXES = [
   'official site', 'official website', 'homepage', 'home page', 'website', 'site',
 ];
 
-/** Leading filler, so "the website for linear" resolves to "linear". */
+// Leading filler, so "the website for linear" resolves to "linear".
 const LEADING_FILLER = /^(?:the\s+)?(?:official\s+)?(?:website|site|webpage|homepage|home\s+page|url|link)\s*(?:for|of|at)?\s+/i;
 
 export class InputError extends Error {
@@ -42,15 +40,12 @@ const looksLikeUrl = (s) => {
     /^[^\s/]+\.[a-z]{2,}(\/\S*)?$/i.test(s) || /^[\w-]{2,}(?:\.[\w-]+)+\/\S+$/.test(s);
   if (!domainish) return false;
 
-  // "GOV.UK", "IBM" and "NASA" are written in caps and are brand names, not
-  // addresses. A real hostname always carries a lowercase letter.
+  // GOV.UK, IBM and NASA are written in caps and are brand names, not addresses. A real
+  // hostname always carries a lowercase letter.
   const hostPart = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split(/[/?#]/)[0];
   return /[a-z]/.test(hostPart);
 };
 
-/**
- * @returns {{ kind: 'url'|'name', url?: string, name?: string, original: string }}
- */
 export function classifyInput(raw) {
   if (typeof raw !== 'string') throw new InputError('Input must be a string.');
 
@@ -63,7 +58,8 @@ export function classifyInput(raw) {
 
   // Strip conversational filler at both ends, so "the website for linear" and
   // "linear official site" both resolve to "linear".
-  let changed = true;  while (changed) {
+  let changed = true;
+  while (changed) {
     changed = false;
 
     const leading = value.replace(LEADING_FILLER, '');
@@ -88,10 +84,8 @@ export function classifyInput(raw) {
   return { kind: 'url', url: normaliseUrl(value, raw.trim()), original: raw.trim() };
 }
 
-/**
- * Coerce a URL-ish string into an absolute http(s) URL with tracking params
- * removed. Rejects anything that is not a public web address.
- */
+// Coerces a URL shaped string into an absolute http(s) URL with tracking params
+// removed. Rejects anything that is not a public web address.
 export function normaliseUrl(input, original = input) {
   let candidate = String(input).trim();
 
@@ -144,7 +138,7 @@ function assertPublicHost(hostname, original) {
   }
 }
 
-/** Registrable-ish host: drops www and common subdomains, for grouping brands. */
+// Registrable ish host: drops www and common subdomains, for grouping brands.
 export function rootHost(url) {
   let host;
   try {
@@ -158,7 +152,7 @@ export function rootHost(url) {
   return parts.length > 2 ? parts.slice(-2).join('.') : host;
 }
 
-/** True when `url` is on the same registrable domain as `base`. */
+// True when url is on the same registrable domain as base.
 export function sameSite(url, base) {
   return rootHost(url) === rootHost(base);
 }

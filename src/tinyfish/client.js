@@ -1,29 +1,17 @@
-/**
- * TinyFish HTTP client — the only place in BrandKit that touches the network.
- *
- *   Search  GET  https://api.search.tinyfish.ai/    name -> domain, competitors
- *   Fetch   POST https://api.fetch.tinyfish.ai     pages, CSS, manifests, assets
- *
- * Both are free at any balance; the Browser and Agent surfaces are metered and
- * deliberately unused. A per-URL failure is data, never an exception; every call is
- * timed and recorded for the provenance panel; the API key is never logged.
- *
- * The key is the caller's, passed in per request. There is no environment fallback
- * and no default: a client with no key throws on its first call, which is the whole
- * point of a deployment that holds no secrets of its own.
- */
+// The only place in BrandKit that touches the network.
+//   Search  GET  https://api.search.tinyfish.ai/    name to domain, competitors
+//   Fetch   POST https://api.fetch.tinyfish.ai     pages, CSS, manifests, assets
+// Both are free at any balance. Browser and Agent are metered and unused. A per URL
+// failure is data, never an exception. The key is the caller's and is never logged.
 
 const FETCH_URL = process.env.TINYFISH_FETCH_URL || 'https://api.fetch.tinyfish.ai';
 const SEARCH_URL = process.env.TINYFISH_SEARCH_URL || 'https://api.search.tinyfish.ai/';
 
-/** TinyFish batches at most 10 URLs per Fetch call. */
+// TinyFish batches at most 10 URLs per Fetch call.
 const MAX_URLS_PER_CALL = 10;
 
-/**
- * TinyFish has a 120s CDN ceiling on a batch and 110s per URL. Their docs tell
- * clients to use >= 150s so CDN timeouts arrive as clean errors instead of a
- * socket hangup on our side.
- */
+// The CDN ceiling is 120s per batch. 150s lets a CDN timeout arrive as a clean error
+// rather than a socket hangup on our side.
 const CLIENT_TIMEOUT_MS = 150_000;
 
 const RETRYABLE_HTTP = new Set([429, 500, 502, 503, 504]);
@@ -40,9 +28,6 @@ export class TinyFishError extends Error {
 }
 
 export class TinyFishClient {
-  /**
-   * @param {{ apiKey?: string, fetchImpl?: typeof fetch, onCall?: (r: object) => void }} opts
-   */
   constructor({ apiKey = '', fetchImpl, onCall } = {}) {
     this.apiKey = apiKey || '';
     this.fetchImpl = fetchImpl || globalThis.fetch;
@@ -78,10 +63,7 @@ export class TinyFishClient {
     };
   }
 
-  /**
-   * One HTTP round trip with retry and backoff. Returns the parsed body; the
-   * timing is appended to the provenance log as a side effect.
-   */
+  // One HTTP round trip with retry and backoff. Appends its timing to the provenance log.
   async #request(url, init, { surface, label, meta }) {
     const started = Date.now();
     let attempt = 0;
@@ -134,7 +116,8 @@ export class TinyFishClient {
         clearTimeout(timer);
 
         // Caller-side errors (bad input, 401, 422) will never succeed on retry.
-        if (err instanceof TinyFishError && !RETRYABLE_HTTP.has(err.status)) throw err;        if (attempt >= 3) {
+        if (err instanceof TinyFishError && !RETRYABLE_HTTP.has(err.status)) throw err;
+        if (attempt >= 3) {
           this.#record({
             surface,
             label,
@@ -155,12 +138,7 @@ export class TinyFishClient {
     }
   }
 
-  /**
-   * Search the web. Turns "Vercel" into a domain; finds competitor sites.
-   *
-   * @param {string} query
-   * @param {object} [opts] Mirrors the TinyFish query parameters.
-   */
+  // Turns "Vercel" into a domain, and finds competitor sites.
   async search(query, opts = {}) {
     const params = new URLSearchParams({ query });
     for (const key of [
@@ -180,10 +158,8 @@ export class TinyFishClient {
     );
   }
 
-  /**
-   * Read one or more URLs through TinyFish Fetch. Always resolves: per-URL failures
-   * come back in `errors`, and only a request-level failure throws.
-   */
+  // Always resolves. Per URL failures come back in errors; only a request level
+  // failure throws.
   async fetchContent(urls, opts = {}) {
     const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
     if (!list.length) return { results: [], errors: [] };
@@ -222,8 +198,8 @@ export class TinyFishClient {
         },
       );
 
-    // Batches run two at a time with a short gap: 49 stylesheets is five batches, and
-    // firing them all at once trips the per-key rate limit.
+    // Two batches at a time with a short gap: 49 stylesheets is five batches, and
+    // firing them all at once trips the per key rate limit.
     const concurrency = Math.max(1, opts.concurrency ?? 2);
     const staggerMs = opts.staggerMs ?? 120;
     const responses = [];
@@ -242,8 +218,9 @@ export class TinyFishClient {
     return merged;
   }
 
-  /** Provenance log, oldest first. Safe to return to clients. */
-  getCallLog() {    return this.calls;
+  // The provenance log, oldest first. Safe to return to clients.
+  getCallLog() {
+    return this.calls;
   }
 }
 

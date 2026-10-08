@@ -1,8 +1,6 @@
-/**
- * The shared crawl. Everything downstream needs a resolved URL, the head, the
- * stylesheets, the manifest and a page corpus, so it is gathered once here rather
- * than re-fetched per endpoint. Independent stages run concurrently.
- */
+// The shared crawl. Everything downstream needs a resolved URL, the head, the
+// stylesheets, the manifest, and a page corpus, so it is gathered once here.
+// Independent stages run concurrently.
 
 import { classifyInput } from '../resolve/input.js';
 import { resolveFromSearch } from '../resolve/domain.js';
@@ -12,17 +10,13 @@ import { fetchManifest } from '../crawl/manifest.js';
 import { fetchPage, selectPages } from '../crawl/pages.js';
 import { explainError, isRequestLevel } from '../tinyfish/errors.js';
 
-/**
- * Depth controls how many *pages* are read. Stylesheets are always read broadly:
- * a framework site routinely spreads one brand token set across 40+ files with
- * opaque build hashes, so a small cap silently loses the palette entirely.
- */
+// Depth controls how many pages are read. Stylesheets are always read broadly: a
+// framework site spreads one token set across 40+ files, so a small cap loses the palette.
 export const DEPTHS = {
   quick: { pages: 0, sheets: 50 },
   standard: { pages: 5, sheets: 50 },
   deep: { pages: 10, sheets: 60 },
 };
-
 
 export async function collect(client, rawInput, opts = {}) {
   const depthKey = DEPTHS[opts.depth] ? opts.depth : 'standard';
@@ -42,8 +36,8 @@ export async function collect(client, rawInput, opts = {}) {
   // --- 2. Head and homepage, both needed to plan the rest -------------------
   let crawl = await readSite(client, resolution.url, depth, progress, warnings);
 
-  // If a name resolved to a domain that cannot be read — a bot wall, a dead host, a
-  // parked domain — try the next candidate Search offered before giving up.
+  // If a name resolved to a domain that cannot be read, because of a bot wall, a dead
+  // host, or a parked domain, try the next candidate Search offered.
   const alternatives = (resolution.candidates || [])
     .map((c) => c.url)
     .filter((url) => url && url !== crawl.url);
@@ -76,7 +70,7 @@ export async function collect(client, rawInput, opts = {}) {
   };
 }
 
-/** Read one site: head, homepage, linked pages, then stylesheets and manifest. */
+// Read one site: head, homepage, linked pages, then stylesheets and manifest.
 async function readSite(client, url, depth, progress, warnings, { quiet = false } = {}) {
   const announce = quiet ? () => {} : progress;
 
@@ -93,8 +87,7 @@ async function readSite(client, url, depth, progress, warnings, { quiet = false 
         url,
         ok: false,
         error: err.message,
-        // collect() needs the code to tell an auth failure apart from a site
-        // that blocks crawlers.
+        // Downstream needs the code to tell an auth failure from a crawler block.
         errorCode: err.code || null,
         html: '',
         links: [],
@@ -179,12 +172,9 @@ async function readSite(client, url, depth, progress, warnings, { quiet = false 
   };
 }
 
-/**
- * Build the "we could not read this site" error without lying about why. A bad API
- * key and a bot wall look identical at this point: both leave zero pages and no
- * head, and blaming the site sends people off to try other URLs while the real fault
- * is an expired key. The per-URL code decides the wording.
- */
+// Builds the "we could not read this site" error without lying about why. A bad key
+// and a bot wall look identical here: no pages, no head. Blaming the site sends
+// people off to try other URLs when the real fault is an expired key.
 function noReadableContent(url, page) {
   const causeCode = page.errorCode || null;
   const requestLevel = isRequestLevel(causeCode);

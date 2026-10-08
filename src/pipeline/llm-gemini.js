@@ -1,34 +1,18 @@
-/**
- * Gemini transport for the narration layer.
- *
- * Google does not serve `/chat/completions` on its own domain, so this speaks the
- * Interactions API: `x-goog-api-key` auth, an `input` / `system_instruction` body,
- * and a `steps[]` reply with no `choices[0].message.content`. That is why it cannot
- * be reached by pointing an OpenAI-compatible base URL at it.
- *
- * Two ladders here as well, and the model ladder is the important one:
- *
- *   - Body ladder: shed a field when the request is *refused* (400, 404, 422).
- *   - Model ladder: when the model is *unavailable* (429, 503), walk down
- *     GEMINI_FALLBACKS to another text model.
- *
- * Both were needed in practice. On the free tier `gemini-3.8-flash` returned 503
- * "high demand" for structured requests while `gemini-3.1-flash-lite` answered, and
- * the free quota is charged per project and resets daily — so a caller who picked
- * the flagship and hit its limit could still succeed on a different model.
- *
- * Docs: https://ai.google.dev/gemini-api/docs/text-generation
- */
+// Google does not serve /chat/completions on its own domain, so this speaks the
+// Interactions API: x-goog-api-key auth, an input and system_instruction body, and a
+// steps[] reply. That is why an OpenAI compatible base URL cannot reach it.
+//
+// Two ladders, and the model ladder is the one that matters. The body ladder sheds a
+// field on a refusal (400, 404, 422). The model ladder walks down GEMINI_FALLBACKS
+// when the model is unavailable (429, 503), because the free quota is charged per
+// project and resets daily, so a caller who picked a busy model can still succeed.
 
 import { GEMINI_MODELS, GEMINI_FALLBACKS, LIMITS } from './llm-presets.js';
 
 const TEMPERATURE = 0.4;
 
-/**
- * Higher than the OpenAI path because thinking tokens come out of the same budget: a
- * limit sized for a non-reasoning model truncates the JSON mid-object, and the
- * sanitiser then discards the whole narrative.
- */
+// Higher than the OpenAI path because thinking tokens come out of the same budget. A
+// cap sized for a non reasoning model truncates the JSON mid object.
 const MAX_OUTPUT_TOKENS = 4096;
 
 const TIMEOUT_MS = 90_000;
@@ -45,7 +29,8 @@ class GeminiError extends Error {
   }
 }
 
-/** Passed as `response_format.schema`. All but `toneSummary` is optional so a truncated reply still parses. */
+// Passed as response_format.schema. All but toneSummary is optional, so a reply that
+// was cut short still parses.
 const NARRATIVE_SCHEMA = {
   type: 'object',
   properties: {
@@ -69,11 +54,8 @@ const NARRATIVE_SCHEMA = {
   required: ['toneSummary'],
 };
 
-/**
- * Attempt ladder, fullest request first, each a strict subset of the one before.
- * `response_format` is the most likely to be refused by a proxy, `thinking_level`
- * the least, so they go first.
- */
+// Fullest request first, each rung a subset of the one before. response_format is the
+// field a proxy refuses most often and thinking_level the least, so they go first.
 function attempts({ model, system, user, config }) {
   const base = { model, input: user, system_instruction: system };
   const generationConfig = { temperature: TEMPERATURE, max_output_tokens: MAX_OUTPUT_TOKENS };
@@ -88,7 +70,7 @@ function attempts({ model, system, user, config }) {
   ];
 }
 
-/** `steps` is current; `candidates` is the older shape a proxy or Vertex endpoint may still return. */
+// steps is the current shape. candidates is the older one a proxy or Vertex may return.
 export function extractText(body) {
   if (Array.isArray(body?.steps)) {
     const text = body.steps
@@ -100,8 +82,7 @@ export function extractText(body) {
     if (text) return text;
   }
 
-  // `output_text` is an SDK convenience property, not a REST field, but a proxy
-  // that adds it costs nothing to read.
+  // output_text is an SDK convenience property, not a REST field. Reading it is free.
   if (typeof body?.output_text === 'string' && body.output_text) return body.output_text;
   const parts = body?.candidates?.[0]?.content?.parts;
   if (Array.isArray(parts)) {
@@ -114,13 +95,8 @@ export function extractText(body) {
   return '';
 }
 
-/**
- * Pull a human-readable message out of Google's error body.
- *
- * Google answers with a bare `[{error:{code,message,status}}]` array rather than a
- * single object, so reading only the object shape surfaced the whole JSON array to
- * the user. Whitespace is collapsed for the same reason.
- */
+// Google answers with a bare [{error:{code,message,status}}] array, so reading only
+// the object shape surfaced the whole array to the user.
 function readErrorDetail(raw) {
   if (!raw) return '';
   try {
@@ -142,8 +118,8 @@ async function failureReason(res, model) {
     detail = '';
   }
 
-  // A 429 on the free tier is a fact about the plan, not a bad key. Saying so is the
-  // difference between someone waiting and someone giving up on their setup.
+  // A 429 on the free tier is a fact about the plan, not a bad key. Say when it resets,
+  // which is the difference between someone waiting and someone giving up.
   if (res.status === 429) {
     const retryAfter = Number(res.headers?.get?.('retry-after'));
     const wait = Number.isFinite(retryAfter) && retryAfter > 0
@@ -160,8 +136,8 @@ async function failureReason(res, model) {
     return `HTTP 404: ${model} was not found. Known text models: ${Object.keys(GEMINI_MODELS).join(', ')}.`;
   }
 
-  // A rejected key is the most common failure on a free tier, and it is worth naming
-  // as such instead of leaving the reader to infer it from a status line.
+  // A rejected key is the most common failure on a free tier. Name it rather than
+  // leaving the reader to infer it from a status line.
   if (res.status === 400 || res.status === 401 || res.status === 403) {
     return `HTTP ${res.status}: ${detail || 'the provider rejected that key'}`;
   }
@@ -173,29 +149,24 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function backoff(attempt, retryAfterHeader) {
   const hinted = Number(retryAfterHeader);
-  // Google's daily-limit retry-after is measured in hours. Sitting through one would
-  // hold a request open far past any sensible timeout, so it is reported, not waited.
+  // Google's daily limit retry-after is measured in hours, so report it, do not wait.
   if (Number.isFinite(hinted) && hinted > 0) return Math.min(hinted * 1000, 20_000);
   return 600 * 2 ** attempt + Math.floor(Math.random() * 400);
 }
 
-/** A wait this long means the limit is a daily one, so try a different model instead. */
+// A wait this long means the limit is a daily one, so try another model.
 function rateLimited(res) {
   const hinted = Number(res.headers?.get?.('retry-after'));
   return res.status === 429 && Number.isFinite(hinted) && hinted > 120;
 }
 
-/**
- * Call Gemini, degrading the body and then the model until one is accepted.
- *
- * @returns {Promise<string>} the model's raw text output
- * @throws {GeminiError} on transport failure or after every model and body is refused
- */
+// Degrades the body, then the model, until one is accepted. Throws GeminiError on a
+// transport failure or after every model and body has been refused.
 export async function callGemini(prompt, config) {
   const url = config.endpoint || `${config.baseUrl}/interactions`;
 
   // The caller's model first, then the fallbacks. Duplicates are dropped so a caller
-  // who named a fallback model does not retry it twice.
+  // who named a fallback does not retry it twice.
   const models = [...new Set([config.model, ...GEMINI_FALLBACKS])].filter(Boolean);
 
   let firstRefusal = null;
@@ -228,9 +199,9 @@ export async function callGemini(prompt, config) {
         if (res.ok) {
           const text = extractText(await res.json());
           if (text) return text;
-          // A 200 with no text is a malformed reply, not something to solve by
-          // shedding fields. Recorded and the ladder moves on, so a model that
-          // answers badly does not hide a model that would have answered well.
+          // A 200 with no text is a malformed reply, not something a field can fix. Record
+          // it and move on, so a model that answers badly does not hide one that would
+          // have answered well.
           lastUnavailable = `${model} replied 200 with no text`;
           continue;
         }
@@ -239,9 +210,9 @@ export async function callGemini(prompt, config) {
           const reason = await failureReason(res, model);
           lastUnavailable = reason;
 
-          // A daily quota on this model says nothing about the next model, and shedding
-          // request fields cannot fix it either. Leave both ladders at once: any further
-          // call here would spend quota that is already spent.
+          // A daily quota on this model says nothing about the next one, and shedding
+          // fields cannot fix it. Leave both ladders: another call would spend quota
+          // that is already spent.
           if (rateLimited(res)) {
             exhausted = true;
             break;
@@ -254,9 +225,8 @@ export async function callGemini(prompt, config) {
 
         if (REFUSED.has(res.status)) {
           const reason = await failureReason(res, model);
-          // The *first* refusal is reported, because that is the caller's own model
-          // and the one they typed. Reporting the last would name a fallback they
-          // never asked for.
+          // The first refusal is reported, because that is the caller's own model. The
+          // last would name a fallback they never asked for.
           firstRefusal = firstRefusal || reason;
           break;
         }
@@ -264,16 +234,15 @@ export async function callGemini(prompt, config) {
         throw new GeminiError(`Gemini returned ${await failureReason(res, model)}`, { status: res.status, model });
       }
 
-      // This model's quota is gone for the day: no point trying a smaller body on it.
+      // This model's quota is gone for the day, so a smaller body cannot help.
       if (exhausted) break;
     }
   }
 
   if (firstRefusal) throw new GeminiError(firstRefusal, { model: config.model });
 
-  // Every model answered 200 and none produced text. Returning empty hands this to
-  // narrate, which reports it as an unparseable reply — the same verdict a provider
-  // returning prose we cannot parse gets, and the more useful one.
+  // Every model answered 200 and none produced text. Return empty so narrate reports
+  // an unparseable reply, which is the more useful verdict.
   if (lastUnavailable?.endsWith('with no text')) return '';
 
   throw new GeminiError(

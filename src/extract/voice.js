@@ -468,7 +468,8 @@ function pickSignalSentences(sentences, metrics, pronouns, url) {
 
 // --- numeric helpers -------------------------------------------------------
 
-function countTerms(corpus, terms) {  let n = 0;
+function countTerms(corpus, terms) {
+  let n = 0;
   for (const term of terms) {
     if (term.includes(' ')) {
       n += (corpus.match(new RegExp(escapeRe(term), 'g')) || []).length;

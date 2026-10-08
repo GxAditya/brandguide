@@ -1,9 +1,6 @@
-/**
- * Identity extraction: the plain facts a brand guide opens with.
- * Name, what it says it is, what it is called, what category it sits in.
- */
+// Identity extraction: the plain facts a brand guide opens with.
+// Name, what it says it is, what it is called, what category it sits in.
 
-/** Websites whose nav carries the company name in a predictable place. */
 const NAME_FROM_TITLE = (title) => {
   if (!title) return null;
   const cleaned = title
@@ -21,11 +18,9 @@ const NAME_FROM_OG_SITE = (value) => {
   return trimmed.length > 1 && trimmed.length <= 48 ? trimmed : null;
 };
 
-/**
- * First meaningful heading on the page, which is often the brand name. A heading
- * that *ends with* the brand token is a phrase about the brand, not the brand:
- * "Popular on GOV.UK" and "Welcome to GOV.UK" both qualify, and neither is a name.
- */
+// First meaningful heading on the page, which is often the brand name. A heading
+// that ends with the brand token is a phrase about the brand, not the brand:
+// "Popular on GOV.UK" and "Welcome to GOV.UK" both qualify, and neither is a name.
 const NAME_FROM_H1 = (html, host) => {
   if (!html) return null;
   const label = host ? host.replace(/^www\d?\./, '').split('.')[0] : null;
@@ -47,14 +42,11 @@ const NAME_FROM_H1 = (html, host) => {
   return null;
 };
 
-/**
- * The brand's own capitalisation of its name, taken from its own copy.
- *
- * gov.uk has no h1 and titles itself "Welcome to GOV.UK", so every structural
- * source either fails or returns something wrong. Its own headings do say
- * "Popular on GOV.UK", so matching the domain against the page text recovers it
- * without any brand-specific rule.
- */
+// The brand's own capitalisation of its name, taken from its own copy.
+// gov.uk has no h1 and titles itself "Welcome to GOV.UK", so every structural
+// source either fails or returns something wrong. Its own headings do say
+// "Popular on GOV.UK", so matching the domain against the page text recovers it
+// without any brand-specific rule.
 function NAME_FROM_PAGE_TEXT(html, host) {
   if (!html || !host) return null;
   const text = STRIP(html).slice(0, 60_000);
@@ -75,12 +67,6 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/**
- * @param {object} input
- * @param {object} input.head parsed head
- * @param {object|null} input.manifest
- * @param {object[]} input.pages
- */
 export function extractIdentity({ head = {}, manifest = null, pages = [], resolution = {} }) {
   const host = safeHost(resolution.url);
 
@@ -177,7 +163,7 @@ function cleanName(value) {
     .trim() || 'Unknown';
 }
 
-/** Casing is preserved: "GOV.UK" and "IBM" are their own names. */
+// Casing is preserved: "GOV.UK" and "IBM" are their own names.
 function decodeText(value) {
   return String(value)
     .replace(/&amp;/gi, '&')

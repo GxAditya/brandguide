@@ -1,9 +1,7 @@
-/**
- * Colour extraction, in descending order of trust: design-system custom properties,
- * then colour-literal frequency, then `theme-color` as a fallback that never
- * competes. A declared token always outranks a frequency hit: on a Tailwind site
- * white is used more than any brand colour, so "used most" is not "the brand colour".
- */
+// Colour extraction, in descending order of trust: design system custom properties,
+// then colour literal frequency, then theme-color as a fallback that never competes. A
+// declared token always outranks a frequency hit, because on a Tailwind site white is
+// used more than any brand colour, so "used most" is not "the brand colour".
 
 import {
   parseColor, describeColour, contrastRatio, wcagGrade, mix, deltaE2000,
@@ -13,18 +11,16 @@ import {
   stripComments, parseCustomProperties, resolveCustomProperty, findColourOccurrences,
 } from '../lib/css.js';
 
-/**
- * Tokens are tiered before scoring: `--color-bg-primary` says the site considers
- * this its background, while `--header-bg` says one component tinted its header.
- */
+// Tokens are tiered before scoring. --color-bg-primary says the site considers this its
+// background, while --header-bg says one component tinted its header.
 
-/** Segments that mark a token as belonging to a deliberate design system. */
+// Segments that mark a token as belonging to a deliberate design system.
 const NAMESPACES = new Set([
   'color', 'colors', 'colour', 'colours', 'theme', 'brand', 'ui', 'tokens',
   'token', 'semantic', 'app', 'ds', 'design', 'palette', 'base', 'global',
 ]);
 
-/** Role words, mapped to the role they describe. */
+// Role words, mapped to the role they describe.
 const ROLE_WORDS = {
   primary: 'primary', brand: 'primary', main: 'primary', key: 'primary',
   secondary: 'secondary', accent: 'accent', highlight: 'accent',
@@ -46,17 +42,14 @@ const ROLE_WORDS = {
 
 const TEXT_WORDS = new Set(['text', 'fg', 'foreground', 'content']);
 
-/**
- * Words that name where a colour is used, not what it is for.
- *
- * `--govuk-surface-text-colour` puts one of these first and a real role second.
- */
+// Words that name where a colour is used, not what it is for. --govuk-surface-text-colour
+// puts one of these first and a real role second.
 const CONTAINER_WORDS = new Set([
   'surface', 'panel', 'card', 'container', 'wrapper', 'shell', 'region',
   'block', 'tile', 'canvas', 'header', 'footer', 'hero', 'sidebar', 'modal',
 ]);
 
-/** Raw colour words: a palette entry, not a role. */
+// Raw colour words: a palette entry, not a role.
 const COLOUR_WORDS = new Set([
   'white', 'black', 'red', 'green', 'blue', 'yellow', 'orange', 'purple',
   'violet', 'indigo', 'pink', 'cyan', 'teal', 'magenta', 'lime', 'olive',
@@ -65,7 +58,7 @@ const COLOUR_WORDS = new Set([
   'emerald', 'turquoise', 'lavender', 'beige', 'ivory', 'tan', 'aqua', 'fuchsia',
 ]);
 
-/** Suffixes that mean "a variant of", which demotes a token out of the palette. */
+// Suffixes that mean a variant, which demotes a token out of the palette.
 const VARIANT_SUFFIX = /^(hover|hovered|active|focus|focused|visited|pressed|selected|disabled|open|opened|closed|tint|shade|soft|hard|ghost|washed|faded|alpha|outline|ring|shadow|1|2|3|4|5|6|7|8|9|0|10|one|two|three|stronger|weaker|lighter|darker|inverse|invert|reversed|small|medium|large)$/i;
 
 const TIERS = {
@@ -77,20 +70,15 @@ const TIERS = {
 
 const NEUTRAL_MAX_SATURATION = 0.14;
 
-/**
- * Alpha below this is an overlay, not a brand colour. Several translucent tokens
- * collapse onto the same opaque RGB once alpha is dropped, which would otherwise
- * hand the guide a solid black "border colour" that exists nowhere.
- */
+// Alpha below this is an overlay, not a brand colour. Several translucent tokens collapse
+// onto the same opaque RGB once alpha is dropped, which would hand the guide a solid
+// black border colour that exists nowhere.
 const OPAQUE_THRESHOLD = 0.6;
 
-/** Colours closer than this in CIEDE2000 are the same colour to a designer. */
+// Colours closer than this in CIEDE2000 are the same colour to a designer.
 const DEDUPE_THRESHOLD = 4.5;
 
-/**
- * Decide what a custom property is.
- * @param {string} name e.g. `--color-bg-primary`
- */
+// Decides what a custom property is. For example, --color-bg-primary.
 export function classifyToken(name) {
   const body = name.replace(/^--/, '').toLowerCase();
   const segments = body.split('-').filter(Boolean);
@@ -114,9 +102,9 @@ export function classifyToken(name) {
   let role = null;
   let roleIndex = -1;
   if (roleHits.length) {
-    // A container word names a place, not a purpose: `--govuk-surface-text-colour`
-    // is a text colour that happens to sit on a surface, and reading it as
-    // `surface` gave GOV.UK a card colour identical to its body text.
+    // A container word names a place, not a purpose. --govuk-surface-text-colour is a
+    // text colour that happens to sit on a surface, and reading it as surface gave
+    // GOV.UK a card colour identical to its body text.
     const first = roleHits[0];
     const next = roleHits.find((hit) => !CONTAINER_WORDS.has(segments[hit.index]));
     const chosen = first && CONTAINER_WORDS.has(segments[first.index]) && next ? next : first;
@@ -135,20 +123,19 @@ export function classifyToken(name) {
   const after = segments.slice(roleIndex + 1);
   const variant = after.some((s) => VARIANT_SUFFIX.test(s));
 
-  // `--color-bg-primary` beats `--color-bg-level-2` and `--color-bg-tint`.
+  // --color-bg-primary beats --color-bg-level-2 and --color-bg-tint.
   const qualifier = after.find((s) => QUALIFIERS.has(s)) || null;
 
-  // `--color-brand-text` names the text colour *on* the brand colour.
+  // --color-brand-text names the text colour on the brand colour.
   const onPrimary = role === 'primary' && after.some((s) => TEXT_WORDS.has(s));
 
-  // A trailing `colour`/`color` marks a design-system token whatever the prefix is
-  // called: GOV.UK ships `--govuk-brand-colour` and `--govuk-text-colour`, and
-  // neither would be recognised without this rule.
+  // A trailing colour word marks a design system token whatever the prefix is called.
+  // GOV.UK ships --govuk-brand-colour and --govuk-text-colour, and neither would be
+  // recognised without this rule.
   const namespacedByColourWord = endsWithColourWord && segments.length >= 3;
 
-  // A bare token is only trusted when the role word leads the whole name
-  // (`--bg-base`). `--header-bg` leads with a component name, so it stays
-  // component-scoped.
+  // A bare token is trusted only when the role word leads the whole name, as in
+  // --bg-base. --header-bg leads with a component name, so it stays component scoped.
   const tier = hasNamespace
     ? 'declaredRole'
     : namespacedByColourWord
@@ -160,16 +147,14 @@ export function classifyToken(name) {
   return { tier, role, onPrimary, variant, qualifier };
 }
 
-/** Strength order within a role: primary > secondary > tertiary > default. */
+// Strength order within a role: primary, then secondary, tertiary, default.
 const QUALIFIERS = new Map([
   ['primary', 4], ['base', 3], ['main', 3], ['default', 2],
   ['secondary', 2], ['tertiary', 1],
 ]);
 
-/**
- * Scope words. `--govuk-body-background-colour` is the page background;
- * `--govuk-template-background-colour` is one component.
- */
+// Scope words. --govuk-body-background-colour is the page background, and
+// --govuk-template-background-colour is one component.
 const PAGE_SCOPE = /(^|-)(body|page|global|document|root|app|site|main|default)(-|$)/;
 const COMPONENT_SCOPE = new RegExp(
   `(^|-)(${[
@@ -184,12 +169,10 @@ const COMPONENT_SCOPE = new RegExp(
     'dock', 'titlebar', 'statusbar', 'breadcrumb', 'overlay', 'dialog', 'drawer',
   ].join('|')})(-|$)`, 'i');
 
-
 export function extractColors({ sheets = [], head = {}, manifest = null }) {
   const combined = sheets.map((s) => stripComments(s.css)).join('\n');
   const props = parseCustomProperties(combined);
   const occurrences = findColourOccurrences(combined);
-  /** @type {Map<string, object>} */
   const candidates = new Map();
   let overlays = 0;
 
@@ -219,18 +202,16 @@ export function extractColors({ sheets = [], head = {}, manifest = null }) {
     }
     if (tokenName) entry.tokens.add(tokenName);
     if (TIERS[tier] > TIERS[entry.tier]) entry.tier = tier;
-    // Hover and tint shades are real, but they are not a colour a marketer
-    // should be handed. Only an explicit `variant: false` clears the flag.
+    // Hover and tint shades are real, but a marketer should not be handed one.
+    // Only an explicit variant: false clears the flag.
     if (variant === false) entry.onlyVariants = false;
   };
 
-  // --- 1. Design-system tokens ---------------------------------------------
-  //
-  // Usage counts as much as the name: a token referenced in twenty rules is
-  // load-bearing, one referenced once is a component constant that happens to be
-  // named like a role. Notion declares `--browser-text-color` for its in-app
-  // browser chrome and `--color-nav-text` for the nav bar; both read as "text"
-  // until you notice neither is the colour of a paragraph.
+  // Usage counts as much as the name. A token referenced in twenty rules is load bearing,
+  // and one referenced once is a component constant that happens to be named like a role.
+  // Notion declares --browser-text-color for its in app browser chrome and
+  // --color-nav-text for the nav bar. Both read as "text" until you notice that neither
+  // is the colour of a paragraph.
   const usage = new Map();
   for (const name of props.keys()) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -255,9 +236,9 @@ export function extractColors({ sheets = [], head = {}, manifest = null }) {
     if (PAGE_SCOPE.test(name)) score += 70;
     if (COMPONENT_SCOPE.test(name)) score -= 55;
 
-    // Log scale, capped, so one runaway count cannot dominate and usage alone can
-    // never beat a tier gap. A token referenced by nothing is demoted rather
-    // than dropped: it can legitimately be applied only from inline styles.
+    // Log scale, capped, so one runaway count cannot dominate and usage alone can never
+    // beat a tier gap. A token referenced by nothing is demoted rather than dropped, since
+    // it can legitimately be applied only from inline styles.
     score += Math.min(60, Math.log2(usedIn + 1) * 22);
     if (usedIn === 0) score -= 45;
 
@@ -287,7 +268,6 @@ export function extractColors({ sheets = [], head = {}, manifest = null }) {
     }
   }
 
-  // --- 2. Usage frequency, capped so it can never outrank a declared token --
   const maxFrequency = Math.max(1, ...occurrences.values());
   for (const [literal, count] of occurrences) {
     const rgb = parseColor(literal);
@@ -305,7 +285,7 @@ export function extractColors({ sheets = [], head = {}, manifest = null }) {
     });
   }
 
-  // --- 3. Browser-chrome colour: reported, but never allowed to compete ----
+  // Browser chrome colour, reported but never allowed to compete.
   const chromeSources = [
     head.themeColor && { value: head.themeColor, source: 'head', method: 'meta-theme-color', detail: '<meta name="theme-color">' },
     manifest?.themeColor && { value: manifest.themeColor, source: 'manifest', method: 'webmanifest-theme-color', detail: 'theme_color' },
@@ -318,7 +298,6 @@ export function extractColors({ sheets = [], head = {}, manifest = null }) {
     }
   }
 
-  // --- 4. Rank -------------------------------------------------------------
   const ranked = [...candidates.values()].map(buildToken).sort((a, b) => b.score - a.score);
 
   const isColourful = (t) => t.chroma >= 18 && t.lightness > 0.05 && t.lightness < 0.95;
@@ -353,7 +332,7 @@ export function extractColors({ sheets = [], head = {}, manifest = null }) {
   };
 }
 
-/** Roles ordered so the most structurally important one is reported first. */
+// Roles ordered so the most structurally important one is reported first.
 const ROLE_PRIORITY = ['primary', 'background', 'text', 'accent', 'secondary', 'border', 'surface', 'muted', 'link', 'onPrimary', 'success', 'warning', 'error', 'info', 'tertiary'];
 
 function buildToken(entry) {
@@ -390,7 +369,6 @@ function pickByRole(ranked, role) {
   return ranked.filter((t) => t.roles.includes(role));
 }
 
-/** Collapse colours a designer would call identical. */
 function dedupeSimilar(tokens) {
   const out = [];
   for (const token of tokens) {
@@ -402,22 +380,17 @@ function dedupeSimilar(tokens) {
   return out;
 }
 
-/**
- * Map colours onto designer roles. The neutral ramp stays out of `roles` — it is a
- * scale, not a role — and text comes from the far end of it relative to the
- * background's lightness.
- */
+// Map colours onto designer roles. The neutral ramp stays out of roles, since it
+// is a scale and not a role, and text comes from the far end of it relative to
+// the background lightness.
 function assignRoles({ ranked, core, neutrals, head, manifest }) {
   const roles = {};
   const inferred = [];
   const shared = [];
   const claimed = [];
 
-  /**
-   * Assign a role from a declared token. `allowDuplicate` covers roles that
-   * legitimately coincide: a link colour that *is* the brand colour is normal, an
-   * accent identical to the primary is not a separate finding.
-   */
+  // Assign a role from a declared token. allowDuplicate covers roles that
+  // legitimately coincide: a link colour that is the brand colour is normal.
   const take = (name, filter, { allowDuplicate = false } = {}) => {
     if (roles[name]) return;
     const pool = ranked.filter((t) => t.roles.includes(name) && filter(t));
@@ -432,11 +405,9 @@ function assignRoles({ ranked, core, neutrals, head, manifest }) {
     else claimed.push(hit.hex);
     roles[name] = hit.hex;
   };
-  /**
-   * Chroma, not HSL saturation, decides whether a colour can play a brand role: a
-   * pale grey reports high saturation near white, which is how a framework's default
-   * link grey ends up reported as the brand's link colour.
-   */
+  // Chroma, not HSL saturation, decides whether a colour can play a brand role: a
+  // pale grey reports high saturation near white, so a framework default link grey
+  // gets reported as the brand link colour.
   const colourful = (t) => t.chroma >= 40;
   const statusColour = (t) => t.chroma >= 25;
 
@@ -461,7 +432,8 @@ function assignRoles({ ranked, core, neutrals, head, manifest }) {
   // Anything the site did not name is derived from what it did declare, and
   // flagged as inferred rather than passed off as measured. Background comes
   // first, because whether text should be light or dark depends on it.
-  if (!roles.background) {    roles.background = head.themeColor || manifest?.themeColor || ramp['0'] || '#ffffff';
+  if (!roles.background) {
+    roles.background = head.themeColor || manifest?.themeColor || ramp['0'] || '#ffffff';
     inferred.push('background');
   }
 
@@ -549,10 +521,8 @@ const ROLE_KEYS = [
   'border', 'link', 'success', 'warning', 'error', 'onPrimary',
 ];
 
-/**
- * Build a 0..900 neutral ramp from whatever greys the site actually uses, then
- * fill any gaps with tints and shades of the most common one.
- */
+// Build a 0..900 neutral ramp from whatever greys the site actually uses, then
+// fill any gaps with tints and shades of the most common one.
 function buildNeutralRamp(neutrals) {
   const ramp = {};
   const sorted = neutrals
@@ -585,7 +555,7 @@ function buildNeutralRamp(neutrals) {
   return ramp;
 }
 
-/** Real foreground/background pairs a designer would actually put on a page. */
+// Real foreground/background pairs a designer would actually put on a page.
 function buildContrastMatrix(roles) {
   const pairs = [
     { fg: 'text', bg: 'background', use: 'body copy on the page' },
