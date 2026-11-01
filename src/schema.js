@@ -258,6 +258,7 @@ export const BRAND_GUIDE_SCHEMA = {
       type: ['object', 'null'],
       description: 'Optional LLM-written interpretation. Never contains colour, type or logo values.',
       properties: {
+        brandStory: { type: ['string', 'null'] },
         toneSummary: { type: ['string', 'null'] },
         positioning: { type: ['string', 'null'] },
         pillars: { type: 'array', items: { type: 'object' } },

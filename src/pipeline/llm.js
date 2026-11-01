@@ -47,14 +47,19 @@ export function llmInfo(creds) {
 // The compact fact sheet the model may see. No raw HTML, and nothing already measured
 // that it could restate wrongly.
 function buildContext({ identity, voice, messaging, colors, typography }) {
-  const headlines = (messaging.headlines || []).slice(0, 20).map((h) => `- ${h.text}`);
-  const signal = (voice.signalSentences || []).slice(0, 10).map((s) => `- ${s.text}`);
-  const claims = (messaging.claims || []).slice(0, 8).map((c) => `- ${c.text}`);
+  const sourceLabel = (url) => url ? ` [${url}]` : '';
+  const headlines = (messaging.headlines || []).slice(0, 20).map((h) => `- ${h.text}${sourceLabel(h.source)}`);
+  const signal = (voice.signalSentences || []).slice(0, 10).map((s) => `- ${s.text}${sourceLabel(s.page || s.url)}`);
+  const claims = (messaging.claims || []).slice(0, 8).map((c) => `- ${c.text}${sourceLabel(c.source)}`);
+  const tagline = identity.tagline || messaging.taglines?.[0]?.text || null;
 
   return [
     `BRAND: ${identity.name}`,
     `DOMAIN: ${identity.domain}`,
-    `CATEGORY GUESS: ${messaging.positioning ? 'see positioning' : 'unknown'}`,
+    `SITE DESCRIPTION: ${identity.description || '(not found)'}`,
+    `TAGLINE: ${tagline || '(not found)'}`,
+    `MEASURED POSITIONING: ${messaging.positioning?.text || '(not found)'}`,
+    `SOURCE COVERAGE: ${voice.pagesAnalysed || 0} page(s), ${voice.sentencesAnalysed || 0} usable sentences`,
     '',
     'MEASURED VOICE (computed, not opinion):',
     JSON.stringify(voice.vector || {}, null, 1),
@@ -82,24 +87,38 @@ function buildContext({ identity, voice, messaging, colors, typography }) {
     .slice(0, MAX_CONTEXT_CHARS);
 }
 
-const SYSTEM_RULES = `You write brand strategy documents for marketing teams.
+const SYSTEM_RULES = `You are the editorial strategist for a professional brand standards guide.
+Write clear, composed prose that a design and marketing team can reuse. The voice should
+sound considered and specific, not like generic SaaS analysis or promotional copy.
 
-You will be given MEASURED facts about a brand's live website: computed linguistic
-metrics, headlines, and representative sentences.
+You will receive measured copy, metadata, and source coverage from a live website.
+Use only what those sources support. Metadata and positioning are the company's stated
+language; voice metrics are observations, not proof of the company's intent.
 
-Rules:
-- Every sentence you write about what this brand says or believes must be supported
-  by a headline or sentence provided to you. Do not invent claims.
+Editorial rules:
+- Start with the company's actual product, audience, and promise when the evidence states them.
+- Write about the company itself, not about the report: never open with “This document,”
+  “This guide,” extraction methods, or a summary of what the reader will see next.
+- If only one page was read, keep the story to what that page says. Never invent a founding
+  story, mission, customer outcome, market position, or product capability.
+- Keep the brand story concrete: connect the stated customer need to the product's stated
+  approach. Do not inflate it into a grand narrative.
+- Describe the writing voice from the supplied metrics and examples. Do not claim the voice
+  is effective, fits the market, or is universally consistent unless the evidence establishes it.
+- Avoid adjective piles, canned phrases, unsupported superlatives, and claims such as
+  “perfectly suits its market,” “no-nonsense,” “blazing fast,” or “revolutionary.”
 - Do not describe colours, fonts, or logos. Those are measured separately.
-- You are describing a real company. Be specific, not generic.
+- Do not repeat the report's extraction process or counts as brand story.
+- If the evidence does not support a detail, omit it instead of filling the gap.
 
 Return ONLY valid JSON with this exact shape:
 {
-  "toneSummary": "2-3 sentences describing how this brand writes and why that suits its market position.",
+  "brandStory": "2-3 polished sentences, about 30-55 words. Explain what the company makes, who it serves, and its central promise or approach only where the supplied sources state those facts. If they do not support all three, write less and leave gaps rather than padding.",
+  "toneSummary": "1-2 concise sentences describing observable writing patterns, grounded in the supplied metrics and examples. Do not speculate about market fit.",
   "pillars": [
     { "name": "Short pillar name", "claim": "What this pillar says, in one sentence.", "evidence": "Quote from the provided headlines or sentences." }
   ],
-  "positioning": "One sentence: what this brand is for and who it is for.",
+  "positioning": "One sentence that restates the supplied measured positioning. Use an empty string if none was found.",
   "doNext": ["Three specific actions for a marketer writing in this voice."],
   "watchOuts": ["Two specific traps to avoid in this voice."]
 }`;
@@ -223,7 +242,8 @@ function sanitise(parsed, facts, pillarCount = 4) {
     : [];
 
   return {
-    toneSummary: str(parsed.toneSummary, 700),
+    brandStory: str(parsed.brandStory, 700),
+    toneSummary: str(parsed.toneSummary, 500),
     positioning: str(parsed.positioning, 300),
     pillars,
     doNext: Array.isArray(parsed.doNext) ? parsed.doNext.map((d) => str(d, 200)).filter(Boolean).slice(0, 3) : [],

@@ -168,6 +168,9 @@ export function toMarkdown(guide) {
     }
   }
 
+  if (guide.narrative?.brandStory) {
+    out.push('## Brand story', '', guide.narrative.brandStory, '');
+  }
   if (guide.narrative?.toneSummary) {
     out.push('## Read of the brand');
     out.push('');

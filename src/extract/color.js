@@ -340,7 +340,7 @@ function buildToken(entry) {
   const desc = describeColour(entry.rgb);
   const sources = new Set(entry.evidence.map((e) => e.source));
   const agreement = Math.min(1, sources.size / 2);
-  const declared = entry.tokens.length > 0;
+  const declared = entry.tokens.size > 0;
 
   const roles = [...entry.roles.keys()].sort(
     (a, b) => (entry.roles.get(b) - entry.roles.get(a)) || (ROLE_PRIORITY.indexOf(a) - ROLE_PRIORITY.indexOf(b)),

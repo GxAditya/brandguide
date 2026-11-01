@@ -20,6 +20,13 @@ export function parseColor(input) {
   if (value.startsWith('#')) return parseHex(value);
   if (value.startsWith('rgb')) return parseRgbFn(value);
   if (value.startsWith('hsl')) return parseHslFn(value);
+  // Many design systems store HSL channels as a custom-property tuple and wrap
+  // it at the use site, e.g. `--primary: 20 48% 22%` + `hsl(var(--primary))`.
+  // The tuple itself is not a complete CSS colour, but it is the value the
+  // extractor sees when resolving that declared token.
+  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:deg|rad|turn)?\s+[+-]?(?:\d+(?:\.\d*)?|\.\d+)%\s+[+-]?(?:\d+(?:\.\d*)?|\.\d+)%(?:\s*\/\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?)?$/.test(value)) {
+    return parseHslParts(value.split(/[\s/]+/).filter(Boolean));
+  }
 
   const named = NAMED_COLORS[value];
   if (named) {
@@ -60,12 +67,26 @@ function parseHslFn(value) {
   const match = value.match(/^hsla?\(([^)]+)\)$/);
   if (!match) return null;
   const parts = match[1].split(/[\s,/]+/).filter(Boolean);
+  return parseHslParts(parts);
+}
+
+function parseHslParts(parts) {
   if (parts.length < 3) return null;
-  const h = ((parseFloat(parts[0]) % 360) + 360) % 360;
+  const h = hueDegrees(parts[0]);
   const s = clamp(parsePercent(parts[1]), 0, 100) / 100;
   const l = clamp(parsePercent(parts[2]), 0, 100) / 100;
   const { r, g, b } = hslToRgb(h, s, l);
   return { r, g, b, a: parts.length > 3 ? alpha(parts[3]) : 1 };
+}
+
+function hueDegrees(token) {
+  const raw = parseFloat(token);
+  const degrees = token.endsWith('rad')
+    ? raw * (180 / Math.PI)
+    : token.endsWith('turn')
+      ? raw * 360
+      : raw;
+  return ((degrees % 360) + 360) % 360;
 }
 
 function channel(token) {

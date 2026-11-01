@@ -29,12 +29,13 @@ class GeminiError extends Error {
   }
 }
 
-// Passed as response_format.schema. All but toneSummary is optional, so a reply that
-// was cut short still parses.
+// Passed as response_format.schema. The story and voice summary anchor the authored
+// introduction; the other fields remain optional so a short reply still parses.
 const NARRATIVE_SCHEMA = {
   type: 'object',
   properties: {
-    toneSummary: { type: 'string', description: '2-3 sentences on how this brand writes.' },
+    brandStory: { type: 'string', description: '2-3 concise, evidence-grounded sentences about the company, not the report.' },
+    toneSummary: { type: 'string', description: '1-2 sentences on observable writing patterns.' },
     pillars: {
       type: 'array',
       items: {
@@ -51,7 +52,7 @@ const NARRATIVE_SCHEMA = {
     doNext: { type: 'array', items: { type: 'string' } },
     watchOuts: { type: 'array', items: { type: 'string' } },
   },
-  required: ['toneSummary'],
+  required: ['brandStory', 'toneSummary'],
 };
 
 // Fullest request first, each rung a subset of the one before. response_format is the

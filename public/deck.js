@@ -658,18 +658,23 @@ function introductionColumns(guide) {
   const narrative = guide.narrative || {};
   const verifiedLogo = Boolean(guide.logos?.primary?.url);
 
-  const left = [
-    `This document sets out how ${name} presents itself. It was assembled from the live site rather than from a design file, so every colour, typeface and logo in it is one the site uses today.`,
-  ];
+  const left = [];
+  if (narrative.brandStory) {
+    left.push(narrative.brandStory);
+  } else {
+    left.push(
+      `This document sets out how ${name} presents itself. It was assembled from the live site rather than from a design file, so every colour, typeface and logo in it is one the site uses today.`,
+    );
 
-  const described = aboutSentence(identity);
-  if (described && described !== name) left.push(described);
+    const described = aboutSentence(identity);
+    if (described && described !== name) left.push(described);
 
-  left.push(
-    `What could be measured, was measured: ${plural(colors.length, 'colour')} resolved from the site's own stylesheets`
-    + ` and ${plural(families.length, 'typeface')} taken from its font rules`
-    + `${verifiedLogo ? ', with every logo asset fetched back and confirmed before it was used here' : ''}.`,
-  );
+    left.push(
+      `What could be measured, was measured: ${plural(colors.length, 'colour')} resolved from the site's own stylesheets`
+      + ` and ${plural(families.length, 'typeface')} taken from its font rules`
+      + `${verifiedLogo ? ', with every logo asset fetched back and confirmed before it was used here' : ''}.`,
+    );
+  }
 
   const right = [];
 
@@ -677,19 +682,28 @@ function introductionColumns(guide) {
   // written rather than measured, so it belongs in the introduction.
   if (narrative.toneSummary) right.push(narrative.toneSummary);
 
-  right.push(
-    'Read the palette, the type scale and the logo pages as the reference for anything new that carries the name. '
-    + 'Each records the values in use now, closely enough to match without guesswork.',
-  );
+  if (narrative.brandStory) {
+    right.push('Use the following palette, type and logo references to carry this identity into new work.');
+    if (prov.pagesRead?.length) {
+      right.push(`This guide draws on ${plural(prov.pagesRead.length, 'page')} and ${plural(prov.stylesheetsRead?.length || 0, 'stylesheet')}. Sources are recorded at the end.`);
+    } else {
+      right.push('Sources for the measured values are recorded at the end.');
+    }
+  } else {
+    right.push(
+      'Read the palette, the type scale and the logo pages as the reference for anything new that carries the name. '
+      + 'Each records the values in use now, closely enough to match without guesswork.',
+    );
 
-  right.push(
-    prov.pagesRead?.length
-      ? `It was built from ${plural(prov.pagesRead.length, 'page')} read through TinyFish Fetch, `
-        + `${plural(prov.stylesheetsRead?.length || 0, 'stylesheet')} read back as raw CSS, and `
-        + `${plural(guide.voice?.sentencesAnalysed || 0, 'sentence')} measured for tone. `
-        + 'The pages at the end record where each value came from.'
-      : 'The pages at the end record where each value came from.',
-  );
+    right.push(
+      prov.pagesRead?.length
+        ? `It was built from ${plural(prov.pagesRead.length, 'page')} read through TinyFish Fetch, `
+          + `${plural(prov.stylesheetsRead?.length || 0, 'stylesheet')} read back as raw CSS, and `
+          + `${plural(guide.voice?.sentencesAnalysed || 0, 'sentence')} measured for tone. `
+          + 'The pages at the end record where each value came from.'
+        : 'The pages at the end record where each value came from.',
+    );
+  }
 
   return [left, right];
 }

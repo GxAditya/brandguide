@@ -111,6 +111,22 @@ test('extractColors prefers declared tokens over frequency', () => {
   assert.equal(colors.roles.link, '#7070ff');
 });
 
+test('extractColors resolves HSL channel tuples used by CSS custom properties', () => {
+  const css = `
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 22 28% 12%;
+      --primary: 20 48% 22%;
+      --primary-foreground: 36 55% 96%;
+    }
+    .button { color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); }
+  `;
+  const colors = extractColors({ sheets: [{ url: 'openpact.css', css, bytes: css.length }], head: {} });
+
+  assert.equal(colors.roles.primary, '#532f1d');
+  assert.ok(colors.tokens.some((token) => token.hex === '#532f1d' && token.declared));
+});
+
 test('extractColors ignores translucent overlays entirely', () => {
   const colors = extractColors({ sheets: SHEETS, head: HEAD });
   assert.ok(colors.source.translucentOverlaysIgnored > 0, 'overlays must be counted');
