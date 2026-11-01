@@ -9,7 +9,6 @@
 
 import { renderDeck } from '/deck.js';
 import { renderCompare } from '/compare.js';
-import { mountOrb } from '/orb.js';
 import { mountGridReveal } from '/grid-reveal.js';
 import { render as renderExport } from '/export/index.js';
 import {
@@ -30,7 +29,6 @@ const state = {
 
   /** 'idle' until a run starts, then 'running' for the rest of the session. */
   view: 'idle',
-  orb: null,
   reveal: null,
   /** The deck's page controller, once a guide has been rendered. */
   deck: null,
@@ -702,8 +700,6 @@ function resetToIdle() {
 
   clearOutput();
 
-  state.orb?.destroy();
-  state.orb = null;
   $('#run-status').hidden = true;
 
   setView('idle');
@@ -941,10 +937,7 @@ function runGuide(input) {
 }
 
 function handleStreamEvent(event, data) {
-  if (event === 'stage') {
-    noteStage(data);
-    return;
-  }
+  if (event === 'stage') return;
 
   if (event === 'done') {
     state.guide = data;
@@ -1064,10 +1057,6 @@ async function runCompare(input) {
       return;
     }
 
-    noteStage({ stage: 'read', status: 'done' });
-    noteStage({ stage: 'crawl', status: 'done', pages: payload.provenance?.resolvedVia?.length || names.length });
-    noteStage({ stage: 'assets', status: 'done' });
-
     renderCompare(payload);
 
     const warnings = warningsToAlert(payload);
@@ -1122,7 +1111,7 @@ function setView(next) {
 
 /* ── Run ─────────────────────────────────────────────────────────────────── */
 
-/** Begin a run: morph the controls into the panel, mount the orb, start the reveal. */
+/** Begin a run: morph the controls into the panel and start the reveal. */
 function startRun({ status }) {
   state.running = true;
 
@@ -1145,29 +1134,10 @@ function startRun({ status }) {
 
   $('#run-status-label').textContent = comparing ? 'Comparing\u2026' : 'Fetching\u2026';
   $('#run-live').textContent = status;
+  $('#run-status').hidden = false;
 
   setView('running');
-  mountRunOrb();
   startReveal();
-}
-
-/** The orb in the panel, mounted per run and destroyed with it. */
-function mountRunOrb() {
-  const canvas = $('#run-orb');
-  if (!canvas) return;
-
-  state.orb?.destroy();
-  state.orb = mountOrb(canvas, {
-    state: 'idle',
-    // The accent rather than the component's own orange, so the panel reads as
-    // part of this product.
-    color: getComputedStyle(document.documentElement)
-      .getPropertyValue('--accent').trim() || '#f5bde6',
-    size: 168,
-    dots: 11,
-  });
-
-  $('#run-status').hidden = false;
 }
 
 /**
@@ -1206,7 +1176,7 @@ function hideCanvas() {
 /**
  * Let the grid resolve and uncover whatever is underneath. A brand can have no
  * usable logo and a comparison has no single mark, so the grid is always resolved
- * rather than snapped away; with no image it settles to a flat grey field.
+ * rather than snapped away; with no image it settles to a flat pink field.
  */
 function resolveReveal(logos) {
   const asset = logos?.lockup || logos?.primary || null;
@@ -1252,10 +1222,8 @@ function finish(kind, message, code, detail, resolved) {
   setBusy(false);
   state.abort = null;
 
-  // The orb has done its job either way: a failed run still had to be waited on.
+  // The wait is over either way: a failed run still had to be waited on.
   $('#run-status').hidden = true;
-  state.orb?.destroy();
-  state.orb = null;
 
   if (!resolved) {
     state.reveal?.destroy();
@@ -1280,33 +1248,12 @@ function finish(kind, message, code, detail, resolved) {
  * The button is never disabled, since it is the only control that can stop a live
  * run; it becomes the cancel affordance instead. `data-busy` is left unset because
  * its only consumer is the spinner, and a spinner on a button labelled Cancel
- * competes with the orb already reporting progress.
+ * competes with the glowing status line already reporting progress.
  */
 function setBusy(busy) {
   state.running = busy;
   for (const button of runButtons()) button.disabled = false;
   setButtonLabel(busy ? 'Cancel' : RUN_LABELS[state.mode]);
-}
-
-/**
- * Which orb state each pipeline stage maps to.
- *
- *   idle        the panel is up and nothing has come back yet
- *   listening   waiting on a response, which is the resolve stage
- *   thinking    reading and processing, which is every stage after it
- *
- * The orb blends between states, so a stage change crossfades rather than cuts.
- */
-const ORB_STATE = {
-  idle: 'idle',
-  resolve: 'listening',
-  read: 'thinking',
-  crawl: 'thinking',
-  assets: 'thinking',
-};
-
-function noteStage(stage) {
-  state.orb?.setState(ORB_STATE[stage.stage] || 'thinking');
 }
 
 /* ── Alerts ──────────────────────────────────────────────────────────────── */

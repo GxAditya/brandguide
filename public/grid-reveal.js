@@ -181,8 +181,19 @@ function coverRect(iw, ih, w, h) {
   return { dx: (w - iw * s) / 2, dy: (h - ih * s) / 2, dw: iw * s, dh: ih * s };
 }
 
-function greyOf(tone, dark, clock) {
-  return (dark ? 30 : 228) + tone * 13 + Math.sin(clock * 1.5 + tone * 6.28) * 3;
+function pinkOf(tone, dark, clock) {
+  // Map the old charcoal/grey cells into the running view's rose palette.
+  // Low values are deep rose; high values are the soft, pale pinks.
+  const darkRose = [83, 39, 58];
+  const lightRose = [246, 220, 229];
+  const range = dark ? 0.08 + tone * 0.76 : 0.64 + tone * 0.34;
+  const pulse = Math.sin(clock * 1.5 + tone * 6.28) * 0.012;
+  const t = clamp01(range + pulse);
+  return {
+    r: mix(darkRose[0], lightRose[0], t),
+    g: mix(darkRose[1], lightRose[1], t),
+    b: mix(darkRose[2], lightRose[2], t),
+  };
 }
 
 /* ── Drawing ─────────────────────────────────────────────────────────────── */
@@ -222,8 +233,8 @@ function paint(p) {
   const innerH = h - top - (onBottom ? 0 : scene.gutter);
   if (innerW <= 0 || innerH <= 0) return;
 
-  const grey = greyOf(p.tone, scene.dark, scene.clock);
-  ctx.fillStyle = `rgb(${shade(grey, p.r)},${shade(grey, p.g)},${shade(grey, p.b)})`;
+  const pink = pinkOf(p.tone, scene.dark, scene.clock);
+  ctx.fillStyle = `rgb(${shade(pink.r, p.r)},${shade(pink.g, p.g)},${shade(pink.b, p.b)})`;
 
   if (scene.rounded) {
     const radius = Math.min(innerW, innerH) * 0.12 * scene.soft;
@@ -243,14 +254,14 @@ function paint(p) {
 function drawScene() {
   const { ctx, root, width, height, split } = scene;
 
-  // Without pixel access the grid stays grey, but the image still fades in below.
+  // Without pixel access the grid stays pink, but the image still fades in below.
   const tint = scene.hasColors ? scene.fade : 0;
-  const base = greyOf(root.tone, scene.dark, scene.clock);
+  const base = pinkOf(root.tone, scene.dark, scene.clock);
 
   // Gutters recess into this instead of cutting through to the surface behind.
-  ctx.fillStyle = `rgb(${Math.round(shade(base, root.r) * 0.92)},${Math.round(
-    shade(base, root.g) * 0.92,
-  )},${Math.round(shade(base, root.b) * 0.92)})`;
+  ctx.fillStyle = `rgb(${Math.round(shade(base.r, root.r) * 0.92)},${Math.round(
+    shade(base.g, root.g) * 0.92,
+  )},${Math.round(shade(base.b, root.b) * 0.92)})`;
   ctx.fillRect(0, 0, width, height);
 
   const walk = (cell, p) => {

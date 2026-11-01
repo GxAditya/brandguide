@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BrandKit — brand guidelines in a single click</title>
-<meta name="description" content="Drop in a company name or URL. BrandKit reads the live site and returns a complete brand guide — logo, colour, typography, voice and messaging — ready for Figma, Tailwind, CSS or your next pitch deck.">
+<title>BrandKit: brand guidelines in a single click</title>
+<meta name="description" content="Drop in a company name or URL. BrandKit reads the live site and returns a complete brand guide (logo, colour, typography, voice and messaging) ready for Figma, Tailwind, CSS or your next pitch deck.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:type" content="website">
-<meta property="og:title" content="BrandKit — brand guidelines in a single click">
+<meta property="og:title" content="BrandKit: brand guidelines in a single click">
 <meta property="og:description" content="A complete brand guide from any company name or URL. Every value measured from the live site, every value sourced.">
 <meta property="og:image" content="/hero.webp">
 <meta name="twitter:card" content="summary_large_image">
@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/deck.css">
 <link rel="stylesheet" href="/landing.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F4729E'/><path d='M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z' fill='%23FFF7FA'/></svg>">
+<link rel="icon" href="/mascot.svg" type="image/svg+xml">
 </head>
 <!--
   data-view="hero" hides the rail, the empty state and the footer. Those
@@ -31,7 +31,7 @@
 <header class="appbar">
   <div class="appbar-inner">
     <a class="brand" href="#top" aria-label="BrandKit home">
-      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z"/></svg>
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-mascot"/></svg>
       <span class="brand-name">BrandKit</span>
     </a>
 
@@ -50,20 +50,15 @@
     <!--
       Credentials live here rather than in a deployment's environment, so this
       control is the difference between a working extraction and a refusal. It
-      sits with the other chrome, and carries a filled state once a key is saved,
+      sits with the other chrome, and its key mark brightens once a key is saved,
       because "did I set this up" is the question the button should answer at a
       glance.
     -->
     <div class="appbar-actions">
-      <button type="button" class="btn-ghost" id="settings-btn" aria-haspopup="dialog" aria-expanded="false" data-has-key="false">
+      <button type="button" class="lp-nav-cta" id="settings-btn" aria-haspopup="dialog" aria-expanded="false" data-has-key="false">
         <svg aria-hidden="true" focusable="false"><use href="#i-key"/></svg>
         <span>Settings</span>
       </button>
-
-      <a class="lp-nav-cta landing-only" href="#hero-composer" data-focus-search>
-        Get Started
-        <svg aria-hidden="true"><use href="#i-arrow"/></svg>
-      </a>
     </div>
   </div>
 </header>
@@ -97,8 +92,8 @@
     <div class="sheet-divider" role="presentation"></div>
 
     <!--
-      Narration is optional and off by default. Everything measured — colour,
-      type, contrast, voice — is computed from the fetched bytes and needs no key
+      Narration is optional and off by default. Everything measured (colour,
+      type, contrast, voice) is computed from the fetched bytes and needs no key
       at all, so this section adds writing rather than capability.
     -->
     <div class="field">
@@ -167,7 +162,7 @@
       Brand guides, read live from the web
     </p>
     <h1 class="hero-title" id="hero-title">Generate brand guidelines in a <em>single click</em>.</h1>
-    <p class="hero-sub">Drop in a name or URL. Logo, colour, type and voice — one guide, ready for the next deck.</p>
+    <p class="hero-sub">Drop in a name or URL. Logo, colour, type and voice in one guide, ready for the next deck.</p>
   </div>
 
   <div class="hero-inner">
@@ -240,29 +235,15 @@
       becomes the panel: the controls do not move anywhere, the container they
       are already in changes shape around them.
 
-      Only the orb and the word. The pipeline reports four stages and a call
-      log, and all of it is instrumentation the person waiting does not need.
-      This state says one true thing and nothing else.
+      Only the word. The pipeline reports four stages and a call log, and all of
+      it is instrumentation the person waiting does not need. This state says one
+      true thing and nothing else.
     -->
     <div class="run-status" id="run-status" hidden>
-      <!--
-        The word, then the orb. Read as a sentence it is "Fetching…" followed by the
-        thing doing the fetching, so the label leads — and being first in the DOM as
-        well as on screen keeps the two orders from disagreeing.
-      -->
       <p class="run-status-label" id="run-status-label">Fetching&hellip;</p>
-      <canvas class="run-orb" id="run-orb" width="168" height="168"
-              role="img" aria-label="Reading the site"></canvas>
       <p class="sr-only" role="status" aria-live="polite" id="run-live"></p>
     </div>
   </div>
-
-  <p class="hero-trust landing-only">
-    <span class="trust-live"><i aria-hidden="true"></i> Live, not templated</span>
-    <span>Every value carries its source</span>
-    <span>Seven export formats</span>
-    <span>Nothing stored</span>
-  </p>
 </section>
 
 <!-- ── The marketing page ────────────────────────────────────────────────── -->
@@ -271,9 +252,8 @@
   <!-- Features -->
   <section class="lp-section lp-features" id="features" aria-labelledby="features-title">
     <div class="lp-head" data-reveal>
-      <p class="lp-kicker"><span>01</span> What you get</p>
       <h2 class="lp-title" id="features-title">Everything a brand is, <em>measured</em>.</h2>
-      <p class="lp-lede">Not a moodboard, not a guess. The guide is built from the live site's own bytes — and it arrives already wearing the brand's colours and typefaces.</p>
+      <p class="lp-lede">Not a moodboard, not a guess. The guide is built from the live site's own bytes, and it arrives already wearing the brand's colours and typefaces.</p>
     </div>
 
     <div class="feature-grid">
@@ -313,7 +293,6 @@
   <section class="lp-section lp-guides" id="guides" aria-labelledby="guides-title">
     <div class="lp-head lp-head-split" data-reveal>
       <div>
-        <p class="lp-kicker"><span>02</span> Real guides</p>
         <h2 class="lp-title" id="guides-title">Not mockups. <em>Live output.</em></h2>
       </div>
       <p class="lp-lede">Three deliberately awkward sites, read live through TinyFish Search and Fetch. Nothing is special-cased in the code.</p>
@@ -322,7 +301,9 @@
     <div class="guide-grid">
       <figure class="guide-card" data-reveal style="--i: 0">
         <div class="guide-frame">
-          <img src="/showcase-linear.webp" alt="A Linear brand guide extracted by BrandKit, set in Inter Variable on a light page" width="900" height="1309" loading="lazy">
+          <div class="guide-scroll" tabindex="0" role="region" aria-label="Linear brand guide, scrollable">
+            <img src="/showcase-linear.webp" alt="The complete Linear brand guide, from the cover and logomark through colour and typography" width="900" height="5063" loading="lazy" decoding="async" draggable="false">
+          </div>
           <span class="guide-stat">0.74 confidence</span>
         </div>
         <figcaption>
@@ -333,7 +314,9 @@
 
       <figure class="guide-card" data-reveal style="--i: 1">
         <div class="guide-frame">
-          <img src="/showcase-govuk.webp" alt="A GOV.UK brand guide extracted by BrandKit, set in GDS Transport with the GOV.UK blue" width="900" height="1309" loading="lazy">
+          <div class="guide-scroll" tabindex="0" role="region" aria-label="GOV.UK brand guide, scrollable">
+            <img src="/showcase-govuk.webp" alt="The complete GOV.UK brand guide, from the cover and logomark through colour and typography" width="900" height="5143" loading="lazy" decoding="async" draggable="false">
+          </div>
           <span class="guide-stat">0.77 confidence</span>
         </div>
         <figcaption>
@@ -344,7 +327,9 @@
 
       <figure class="guide-card" data-reveal style="--i: 2">
         <div class="guide-frame">
-          <img src="/showcase-patagonia.webp" alt="A Patagonia brand guide extracted by BrandKit, set in Ridgeway Sans on a warm page" width="900" height="1309" loading="lazy">
+          <div class="guide-scroll" tabindex="0" role="region" aria-label="Patagonia brand guide, scrollable">
+            <img src="/showcase-patagonia.webp" alt="The complete Patagonia brand guide, from the cover and logomark through colour and typography" width="900" height="4270" loading="lazy" decoding="async" draggable="false">
+          </div>
           <span class="guide-stat">0.79 confidence</span>
         </div>
         <figcaption>
@@ -358,7 +343,6 @@
   <!-- How it works -->
   <section class="lp-section lp-how" id="how-it-works" aria-labelledby="how-title">
     <div class="lp-head" data-reveal>
-      <p class="lp-kicker"><span>03</span> How it works</p>
       <h2 class="lp-title" id="how-title">One name in. <em>One complete guide out.</em></h2>
       <p class="lp-lede">No crawling setup, no scraping library, no headless browser. A name or a URL is the whole brief.</p>
     </div>
@@ -386,7 +370,6 @@
   <section class="lp-section lp-exports" id="exports" aria-labelledby="exports-title">
     <div class="export-panel" data-reveal>
       <div class="export-copy">
-        <p class="lp-kicker"><span>04</span> Take it with you</p>
         <h2 class="lp-title" id="exports-title">The guide ends. <em>The work starts.</em></h2>
         <p class="lp-lede">The same extracted object serialises into seven formats. No re-crawl, no retyping, no handoff document that goes stale.</p>
         <div class="export-sample" aria-label="Example CSS custom property from a Linear extraction">
@@ -414,12 +397,11 @@
     <div class="final-orb final-orb-b" aria-hidden="true"></div>
     <div class="final-card" data-reveal>
       <span class="final-mark" aria-hidden="true">
-        <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="9"/><path d="M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z"/></svg>
+        <svg viewBox="0 0 40 40"><use href="#i-mascot"/></svg>
       </span>
-      <p class="lp-kicker"><span>05</span> Start with a name</p>
       <h2 class="lp-title" id="start-title">Start with a name.
         <br><em>Leave with a brand guide.</em></h2>
-      <p class="lp-lede">Logo, colour, type, voice and messaging — one click, ready for the next deck, the next handoff, the next launch.</p>
+      <p class="lp-lede">Logo, colour, type, voice and messaging. One click, ready for the next deck, the next handoff, the next launch.</p>
       <a class="lp-button" href="#hero-composer" data-focus-search>
         Get Started
         <svg aria-hidden="true"><use href="#i-arrow"/></svg>
@@ -433,7 +415,7 @@
     <div class="lp-footer-inner">
       <div class="lp-footer-top">
         <a class="brand" href="#top" aria-label="BrandKit home">
-          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z"/></svg>
+          <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-mascot"/></svg>
           <span class="brand-name">BrandKit</span>
         </a>
 
@@ -575,6 +557,16 @@
 
 <svg class="sprite" aria-hidden="true" focusable="false">
   <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.2 10.2 13.5 13.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-mascot" viewBox="0 0 40 40">
+    <rect width="40" height="40" rx="10" fill="var(--mascot-bg, #f4729e)"/>
+    <path d="M14.5 25.5c-3.9-.7-6.2 1.8-5.2 4.2.8 1.9 3.1 2.4 4.5 1.2 1.1-1 .6-2.7-.8-3-.8-.2-1.5.3-1.6 1" fill="none" stroke="var(--mascot-ink, #fff7fa)" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M18 15.3c.3-2 1.5-3.5 3-3.7 1.8-.2 3 1.2 3.5 3.3.7-1.9 1.9-2.8 3.3-2.5 1.4.3 2 1.6 2.2 3.3Z" fill="var(--mascot-ink, #fff7fa)"/>
+    <path d="M14.5 16.4c1.5-2 3.9-3.4 6.8-3.6 4.8-.3 8.6 2.4 10 6.6.8 2.4.3 4.4-1.4 5.6-1.4 1-3.2 1.2-4.9.8-1.4-.3-2.5.4-3.8.8-4.1 1.3-8.2-1.3-8.9-5.4-.4-2.3.4-4.3 2.2-4.8Z" fill="var(--mascot-ink, #fff7fa)"/>
+    <circle cx="25.3" cy="18.4" r="3.5" fill="var(--mascot-bg, #f4729e)"/>
+    <circle cx="26.4" cy="17.5" r="1.05" fill="var(--mascot-ink, #fff7fa)"/>
+    <path d="M29.8 23.4c1.4 .2 2.6-.2 3.5-1.1" fill="none" stroke="var(--mascot-bg, #f4729e)" stroke-width="1.4" stroke-linecap="round"/>
+    <circle cx="32.7" cy="20.9" r=".75" fill="var(--mascot-bg, #f4729e)"/>
+  </symbol>
   <symbol id="i-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-prev" viewBox="0 0 16 16"><path d="M10 3.5L5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>

@@ -2,10 +2,8 @@
    The deck: a paged brand guide, reproduced as a landscape 4:3 document.
 
    This stylesheet is deliberately separate from app.css. app.css paints the
-   TOOL (near-black, rose accent). This paints the ARTIFACT, which is set in
-   the brand it documents: --paper, --ink and the type stack are all injected
-   from the extraction, and the neutral values below are only a fallback for a
-   brand whose CSS yielded nothing.
+   TOOL in its soft pink theme. The deck's page chrome uses neutral paper and ink;
+   extracted colour swatches and logo assets retain their original colours.
 
    The canvas is a fixed 1200x900 and is scaled to fit its container, so the
    geometry below is literal: a 6.2% side margin means 74px, exactly as in
@@ -19,8 +17,14 @@
    =========================================================================== */
 
 .deck {
-  --paper: #f3f1ef;
-  --ink: #17161c;
+  --paper: #f5f5f5;
+  --ink: #191919;
+  --ink-100: #ededed;
+  --ink-200: #d8d8d8;
+  --ink-300: #b8b8b8;
+  --ink-950: #f0f0f0;
+  --dimmer: #707070;
+  --accent: var(--ink);
 
   /*
    * Every derived tone is mixed from --ink rather than hardcoded dark values.
@@ -816,14 +820,7 @@ span.cover-mark.is-lockup > svg {
   body { background: #fff; }
   .deck { gap: 0; height: auto; }
 
-  /*
-   * Browsers drop backgrounds and background-images from print by default, on
-   * the grounds that most documents are black text on white. Here they are the
-   * measurement: the palette swatches, the tint strips and the contrast pairs are
-   * the whole point of those pages, and without this they print as blank paper.
-   * So the deck asks to keep its own colour, on the deck subtree only, rather
-   * than switching the setting for the application around it.
-   */
+  /* Keep page chrome neutral while preserving the extracted colors in print. */
   .deck,
   .deck * {
     print-color-adjust: exact;

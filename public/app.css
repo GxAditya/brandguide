@@ -74,6 +74,53 @@
   color-scheme: dark;
 }
 
+/* ── The running view: soft pink chrome ─────────────────────────────────── */
+
+/*
+ * A run keeps the landing page's airy palette. The tool is a pink studio; the
+ * guide inside it is the only thing allowed its own colours.
+ *
+ * The whole scale is re-pointed rather than each rule rewritten. The names stay
+ * semantic: --ink-000 is the page ground, --ink-950 an inset well, --paper the
+ * primary ink. Inverting the values in one place lets every control, card and
+ * table keep the relationships it was designed with, and `.deck` still declares
+ * its own --paper and --ink, so the rendered document is untouched.
+ */
+body[data-view="running"] {
+  --ink-000: #fdf6f9;
+  --ink-050: #fffafc;
+  --ink-100: #fdf0f5;
+  --ink-150: #f8e3eb;
+  --ink-200: #f2d5e1;
+  --ink-250: #eac3d2;
+  --ink-300: #dfadc2;
+  --ink-950: #fff5f9;
+
+  /* 15.4:1, 8.3:1 and 5.0:1 on the page ground. */
+  --paper: #2a1b22;
+  --dim: #5a4450;
+  --dimmer: #7d6470;
+
+  /* Deep enough to carry 12px text on the light surfaces, 5.0:1 on white. */
+  --accent: #cf2b66;
+  --accent-dim: #b31b51;
+  --accent-ink: #fff7fa;
+
+  --ok: #1f7a55;
+  --warn: #9a5a12;
+  --bad: #a2274a;
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.92) inset, 0 18px 38px -30px rgba(74, 28, 47, 0.24);
+  --shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.92) inset, 0 40px 90px -44px rgba(74, 28, 47, 0.34);
+
+  color-scheme: light;
+}
+
+body[data-view="running"] ::selection {
+  background: rgba(248, 180, 198, 0.58);
+  color: #331321;
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 
 /*
@@ -216,9 +263,13 @@ a { color: inherit; }
 
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 
-.brand-mark { width: 26px; height: 26px; flex: none; }
-.brand-mark rect { fill: var(--accent); }
-.brand-mark path { fill: var(--accent-ink); }
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  --mascot-bg: var(--accent);
+  --mascot-ink: var(--accent-ink);
+}
 
 .brand-name { font-weight: 640; letter-spacing: -0.015em; font-size: 15.5px; }
 
@@ -278,20 +329,13 @@ a { color: inherit; }
 }
 
 /*
- * The saved state is drawn on the control rather than left to memory, because
+ * The saved state is drawn on the icon rather than left to memory, because
  * "is my key in?" is the one thing someone opening Settings needs answered
- * before they start typing. The accent plus a filled dot, so it is not colour
- * alone.
+ * before they start typing.
  */
-#settings-btn[data-has-key="true"] {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--ink-300));
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-}
+#settings-btn[data-has-key="true"] svg { opacity: 1; }
 
-#settings-btn[data-has-key="true"] svg { fill: var(--accent); }
-
-#settings-btn[data-has-key="false"] svg { opacity: 0.85; }
+#settings-btn[data-has-key="false"] svg { opacity: 0.62; }
 
 .btn-danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 34%, var(--ink-300)); }
 .btn-danger:hover { color: var(--paper); background: color-mix(in srgb, var(--bad) 16%, var(--ink-100)); }
@@ -1262,6 +1306,12 @@ input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
   to { opacity: 1; transform: none; }
 }
 
+/* The highlight starts off the left edge and leaves past the right. */
+@keyframes run-glow {
+  from { background-position: 100% 50%; }
+  to { background-position: 0% 50%; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Hero
 
@@ -1439,13 +1489,6 @@ body[data-view="idle"] .hero-title { display: block; }
 
 /* No focus ring on the pill. The caret in the field already says where typing
    goes, so a box around it is a second answer to a question that is not open. */
-.search-pill:focus-within {
-  border-color: var(--ink-300);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.05) inset,
-    0 24px 60px -30px rgba(4, 3, 10, 1);
-}
-
 .pill-icon {
   width: 17px;
   height: 17px;
@@ -1453,8 +1496,6 @@ body[data-view="idle"] .hero-title { display: block; }
   color: var(--dimmer);
   transition: color 0.24s var(--ease);
 }
-
-.search-pill:focus-within .pill-icon { color: var(--accent); }
 
 .pill-fields {
   flex: 1;
@@ -1746,11 +1787,11 @@ body[data-view="running"] .hero {
 body[data-view="running"]::before {
   content: "";
   position: fixed;
-  inset: var(--bar-h) 0 0 0;
+  inset: 0;
   z-index: 0;
   background:
-    linear-gradient(to bottom, rgba(10, 3, 12, 0.42), rgba(10, 3, 12, 0.8)),
-    linear-gradient(to bottom, #FBD3E9, #BB377D);
+    radial-gradient(62% 46% at 82% 4%, rgba(248, 180, 198, 0.34), transparent 70%),
+    linear-gradient(to bottom, #fdf6f9, #fbeaf1 58%, #f9e3ed);
   pointer-events: none;
 }
 
@@ -1900,37 +1941,51 @@ body[data-view="running"] .stage {
 /* ── The processing state ───────────────────────────────────────────────── */
 
 /*
- * Centred in every view, the panel included.
+ * One line, centred in the panel.
  *
- * The panel override that used to set `align-items: flex-start` lined the orb up
- * with the left-aligned text above it, which left a 168px circle hanging off one
- * side of a 351px panel with nothing balancing it. The orb is the thing the panel
- * exists to show while a run is in flight, so it sits in the middle of the panel:
- * the label centres with it, and the label is shrink-to-fit, so inheriting the
- * panel's left text alignment does not pull it back out.
+ * The run used to carry an orb here. The label is the only thing that actually
+ * tells the person what is happening, so it is the only thing left — and the
+ * waiting is drawn into the words themselves: a soft light travels through the
+ * text from left to right while the run is in flight.
  */
 .run-status {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding-top: 8px;
+  padding-top: 4px;
   animation: fade-in 0.4s var(--ease) both;
 }
 
-.run-orb {
-  display: block;
-  width: 168px;
-  height: 168px;
-  max-width: 100%;
-}
-
+/*
+ * The sweep is a gradient clipped to the glyphs. The base tone is the quiet
+ * plum of secondary copy, so the sentence is always readable; the bright pink
+ * band is what moves, and the soft shadow keeps the line glowing around the
+ * letters rather than looking like a flat colour swap.
+ */
 .run-status-label {
+  position: relative;
   margin: 0;
   font-size: 15px;
-  font-weight: 560;
+  font-weight: 600;
   letter-spacing: -0.005em;
-  color: var(--paper);
+  color: var(--accent);
+  background-image: linear-gradient(
+    100deg,
+    rgba(125, 100, 112, 0.92) 0%,
+    rgba(125, 100, 112, 0.92) 38%,
+    var(--accent) 50%,
+    rgba(125, 100, 112, 0.92) 62%,
+    rgba(125, 100, 112, 0.92) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 260% 100%;
+  background-position: 100% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 9px rgba(207, 43, 102, 0.28));
+  animation: run-glow 1.9s linear infinite;
 }
 
 /* ── The output box ─────────────────────────────────────────────────────── */
@@ -2206,6 +2261,82 @@ body[data-view="running"] .stage {
 .toast-close svg { width: 12px; height: 12px; }
 .toast-close:hover { background: var(--ink-200); color: var(--paper); }
 
+/* ── Soft pink chrome: the few places that name a colour directly ──────── */
+
+/*
+ * The token block at the top does almost all of the retheme. These are the
+ * surfaces that were written against the old near-black ground in literals:
+ * floating glass, alert tints, and shadows dark enough to read as soot on pink.
+ */
+body[data-view="running"] .appbar-inner {
+  background: rgba(255, 250, 252, 0.82);
+  border-color: rgba(236, 64, 122, 0.16);
+  color: var(--paper);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.95) inset,
+    0 18px 40px -30px rgba(74, 28, 47, 0.32);
+}
+
+body[data-view="running"] .brand-mark {
+  --mascot-bg: var(--accent);
+  --mascot-ink: var(--accent-ink);
+  filter: drop-shadow(0 5px 9px rgba(207, 43, 102, 0.22));
+}
+
+body[data-view="running"] .hero {
+  box-shadow: 18px 0 54px -50px rgba(74, 28, 47, 0.5);
+}
+
+body[data-view="running"] .hero-tabs {
+  background: rgba(255, 255, 255, 0.62);
+  border-color: var(--ink-200);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+body[data-view="running"] .search-pill {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: var(--ink-300);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.95) inset,
+    0 22px 50px -34px rgba(74, 28, 47, 0.4);
+}
+
+body[data-view="running"] .pill-menu,
+body[data-view="running"] .outbox-menu {
+  box-shadow: 0 18px 36px -20px rgba(74, 28, 47, 0.28);
+}
+
+body[data-view="running"] .outbox-frame {
+  box-shadow: 0 26px 60px -50px rgba(74, 28, 47, 0.32);
+}
+
+/* Against pale swatches a white hairline disappears; the ink hairline does not. */
+body[data-view="running"] .swatches i {
+  border-color: rgba(42, 27, 34, 0.14);
+}
+
+body[data-view="running"] .sheet-backdrop {
+  background: rgba(74, 28, 47, 0.28);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* The native arrow is a data URI, so it cannot follow `currentColor`. */
+body[data-view="running"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6.5 8 10.5l4-4' fill='none' stroke='%236c5762' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+body[data-view="running"] .alert[data-kind="error"] {
+  background: #fdf0f4;
+  border-color: #f0c6d3;
+  color: var(--paper);
+}
+
+body[data-view="running"] .alert[data-kind="warn"] {
+  background: #fff8ee;
+  border-color: #f2d9b6;
+  color: var(--paper);
+}
 
 /* ── Hero, responsive ──────────────────────────────────────────────────── */
 
@@ -2256,11 +2387,6 @@ body[data-view="running"] .stage {
   .brand-name { font-size: 15px; }
   .appbar-context { gap: 8px; }
 
-  /* The label is what makes this a sentence rather than an icon; the icon still
-     carries the saved state, so dropping the text costs nothing but the hint. */
-  #settings-btn span { display: none; }
-  #settings-btn { padding: 6px 9px; }
-
   /* A scrolled sheet pinned to the bottom edge reads as a sheet, and on a phone
      the bottom is where the keyboard leaves the least room to lose. */
   .sheet {
@@ -2281,8 +2407,8 @@ body[data-view="running"] .stage {
 
   /*
    * There is no room beside a panel on a phone, so it stops being a side panel
-   * and becomes a full-width band across the top: controls and the orb, then the
-   * reveal below it.
+   * and becomes a full-width band across the top: controls, then the reveal
+   * below it.
    *
    * It also goes back into normal flow. Fixed positioning is what lets the stage
    * sit *beside* the panel on a wide screen, by reserving the panel's width as
@@ -2309,8 +2435,8 @@ body[data-view="running"] .stage {
      * below the search bar — and the `overflow: hidden` the idle hero needs in
      * order to contain its own backdrop cut the depth menu off at that edge. The
      * last option was never drawn, and the stage behind it showed through the gap.
-     * Nothing else in here overflows: the orb is a canvas bounded by its own box,
-     * and the panel's background and border belong to the element itself.
+     * Nothing else in here overflows: the panel's background and border belong to
+     * the element itself.
      *
      * This is the outer half of what the rule below already does for `.hero-inner`.
      */
@@ -2392,6 +2518,14 @@ body[data-view="running"] .stage {
   .toast,
   .outbox-menu {
     animation: none !important;
+  }
+
+  /* A still line of accent text: the message still reads, it just stops moving. */
+  .run-status-label {
+    animation: none !important;
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+    filter: none;
   }
 
   .outbox-canvas { transition: none !important; }
