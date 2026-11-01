@@ -3,12 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BrandKit: live brand extraction</title>
-<meta name="description" content="Give it a company name or URL and get back a structured brand guide: logo, colour palette, typography, tone of voice and messaging, read from the live site with TinyFish Search and Fetch.">
-<meta name="color-scheme" content="dark">
+<title>BrandKit — brand guidelines in a single click</title>
+<meta name="description" content="Drop in a company name or URL. BrandKit reads the live site and returns a complete brand guide — logo, colour, typography, voice and messaging — ready for Figma, Tailwind, CSS or your next pitch deck.">
+<meta name="color-scheme" content="light dark">
+<meta property="og:type" content="website">
+<meta property="og:title" content="BrandKit — brand guidelines in a single click">
+<meta property="og:description" content="A complete brand guide from any company name or URL. Every value measured from the live site, every value sourced.">
+<meta property="og:image" content="/hero.webp">
+<meta name="twitter:card" content="summary_large_image">
+<script>document.documentElement.classList.add('js');</script>
+<link rel="preload" href="/fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/deck.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f5bde6'/><path d='M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z' fill='%231e1e2e'/></svg>">
+<link rel="stylesheet" href="/landing.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23F4729E'/><path d='M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z' fill='%23FFF7FA'/></svg>">
 </head>
 <!--
   data-view="hero" hides the rail, the empty state and the footer. Those
@@ -16,16 +24,23 @@
   controls drive the composer exactly as they always did, and the document
   still renders into the stage when a run finishes. Only the framing changes.
 -->
-<body data-view="idle">
+<body id="top" data-view="idle">
 
-<a class="skip" href="#hero-composer">Skip to the tool</a>
+<a class="skip" href="#input">Skip to the tool</a>
 
 <header class="appbar">
   <div class="appbar-inner">
-    <div class="brand">
-      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7"/><path d="M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z"/></svg>
+    <a class="brand" href="#top" aria-label="BrandKit home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z"/></svg>
       <span class="brand-name">BrandKit</span>
-    </div>
+    </a>
+
+    <nav class="nav-links landing-only" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#guides">Real guides</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#exports">Exports</a>
+    </nav>
 
     <div class="appbar-context" id="appbar-context" hidden>
       <span class="context-name" id="context-name"></span>
@@ -45,19 +60,10 @@
         <span>Settings</span>
       </button>
 
-      <!--
-        Where the code and the author are. Inside the floating tab rather than
-        parked beside it, so the bar reads as one object instead of a logo with two
-        orphans hanging off the edge.
-      -->
-      <nav class="appbar-social" aria-label="BrandKit elsewhere">
-      <a class="social-link" href="https://github.com/GxAditya/Brandkit" target="_blank" rel="noopener noreferrer" aria-label="BrandKit on GitHub" title="GitHub">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-github"/></svg>
+      <a class="lp-nav-cta landing-only" href="#hero-composer" data-focus-search>
+        Get Started
+        <svg aria-hidden="true"><use href="#i-arrow"/></svg>
       </a>
-      <a class="social-link" href="https://x.com/kaditya264" target="_blank" rel="noopener noreferrer" aria-label="kaditya264 on X" title="X">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-x"/></svg>
-        </a>
-      </nav>
     </div>
   </div>
 </header>
@@ -152,9 +158,19 @@
 
 <!-- ── Hero ──────────────────────────────────────────────────────────────── -->
 <section class="hero" aria-labelledby="hero-title">
-  <div class="hero-inner">
-    <h1 class="hero-title" id="hero-title">Generate brand guidelines in a single click.</h1>
+  <div class="hero-scene" aria-hidden="true"></div>
+  <div class="hero-glow" aria-hidden="true"></div>
 
+  <div class="hero-copy landing-only">
+    <p class="hero-eyebrow">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#i-spark"/></svg>
+      Brand guides, read live from the web
+    </p>
+    <h1 class="hero-title" id="hero-title">Generate brand guidelines in a <em>single click</em>.</h1>
+    <p class="hero-sub">Drop in a name or URL. Logo, colour, type and voice — one guide, ready for the next deck.</p>
+  </div>
+
+  <div class="hero-inner">
     <div class="hero-tabs" role="radiogroup" aria-label="Output">
       <button type="button" class="hero-tab" data-mode="guide" aria-pressed="true">Guide</button>
       <button type="button" class="hero-tab" data-mode="compare" aria-pressed="false">Compare</button>
@@ -165,7 +181,7 @@
         <svg class="pill-icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-search"/></svg>
 
         <div class="pill-fields">
-          <input id="input" name="input" type="text" placeholder="linear"
+          <input id="input" name="input" type="text" placeholder="linear or linear.app"
                  aria-label="Company name or website" spellcheck="false" required>
           <div class="pill-split" id="pill-split" hidden>
             <span class="pill-vs">vs</span>
@@ -204,12 +220,19 @@
       </div>
 
       <button type="submit" class="btn-primary hero-cta" id="run-btn">
-        <span class="btn-label">Extract guide</span>
+        <span class="btn-label">Generate guide</span>
         <span class="btn-spinner" aria-hidden="true"></span>
       </button>
     </form>
 
-    <p class="hero-note" id="hero-note">A bare name is resolved through search. A domain is opened directly.</p>
+    <div class="hero-under landing-only">
+      <p class="hero-note" id="hero-note">A bare name is resolved through search. A domain is opened directly.</p>
+      <a class="hero-how" href="#how-it-works">
+        See how it works
+        <svg aria-hidden="true"><use href="#i-arrow-down"/></svg>
+      </a>
+    </div>
+
     <p class="field-error hero-error" id="composer-error" role="alert" hidden></p>
 
     <!--
@@ -233,7 +256,211 @@
       <p class="sr-only" role="status" aria-live="polite" id="run-live"></p>
     </div>
   </div>
+
+  <p class="hero-trust landing-only">
+    <span class="trust-live"><i aria-hidden="true"></i> Live, not templated</span>
+    <span>Every value carries its source</span>
+    <span>Seven export formats</span>
+    <span>Nothing stored</span>
+  </p>
 </section>
+
+<!-- ── The marketing page ────────────────────────────────────────────────── -->
+<div class="landing" id="landing">
+
+  <!-- Features -->
+  <section class="lp-section lp-features" id="features" aria-labelledby="features-title">
+    <div class="lp-head" data-reveal>
+      <p class="lp-kicker"><span>01</span> What you get</p>
+      <h2 class="lp-title" id="features-title">Everything a brand is, <em>measured</em>.</h2>
+      <p class="lp-lede">Not a moodboard, not a guess. The guide is built from the live site's own bytes — and it arrives already wearing the brand's colours and typefaces.</p>
+    </div>
+
+    <div class="feature-grid">
+      <article class="feature-card" data-reveal style="--i: 0">
+        <div class="feature-top">
+          <span class="feature-icon"><svg aria-hidden="true"><use href="#i-scan"/></svg></span>
+          <span class="feature-index">01</span>
+        </div>
+        <h3>Evidence-first extraction</h3>
+        <p>Every colour, typeface and logo is measured from the live site. Every value keeps the source it came from, so nothing has to be taken on trust.</p>
+        <p class="feature-note"><i aria-hidden="true"></i> Measured, not generated</p>
+      </article>
+
+      <article class="feature-card" data-reveal style="--i: 1">
+        <div class="feature-top">
+          <span class="feature-icon"><svg aria-hidden="true"><use href="#i-type"/></svg></span>
+          <span class="feature-index">02</span>
+        </div>
+        <h3>Dressed in the brand</h3>
+        <p>The guide is set in the brand's real palette and typefaces, as a paged document rather than a screenshot. A guide in anything else is just a picture.</p>
+        <p class="feature-note"><i aria-hidden="true"></i> Rendered in-brand</p>
+      </article>
+
+      <article class="feature-card" data-reveal style="--i: 2">
+        <div class="feature-top">
+          <span class="feature-icon"><svg aria-hidden="true"><use href="#i-layers"/></svg></span>
+          <span class="feature-index">03</span>
+        </div>
+        <h3>One guide, seven exits</h3>
+        <p>Move straight into the work: Figma Variables, Tailwind theme, CSS custom properties, Style Dictionary, Markdown, palette SVG or raw JSON.</p>
+        <p class="feature-note"><i aria-hidden="true"></i> Figma · Tailwind · CSS</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- Real guides -->
+  <section class="lp-section lp-guides" id="guides" aria-labelledby="guides-title">
+    <div class="lp-head lp-head-split" data-reveal>
+      <div>
+        <p class="lp-kicker"><span>02</span> Real guides</p>
+        <h2 class="lp-title" id="guides-title">Not mockups. <em>Live output.</em></h2>
+      </div>
+      <p class="lp-lede">Three deliberately awkward sites, read live through TinyFish Search and Fetch. Nothing is special-cased in the code.</p>
+    </div>
+
+    <div class="guide-grid">
+      <figure class="guide-card" data-reveal style="--i: 0">
+        <div class="guide-frame">
+          <img src="/showcase-linear.webp" alt="A Linear brand guide extracted by BrandKit, set in Inter Variable on a light page" width="900" height="1309" loading="lazy">
+          <span class="guide-stat">0.74 confidence</span>
+        </div>
+        <figcaption>
+          <span class="guide-brand">Linear</span>
+          <span class="guide-case">49 build-hashed stylesheets · Inter Variable</span>
+        </figcaption>
+      </figure>
+
+      <figure class="guide-card" data-reveal style="--i: 1">
+        <div class="guide-frame">
+          <img src="/showcase-govuk.webp" alt="A GOV.UK brand guide extracted by BrandKit, set in GDS Transport with the GOV.UK blue" width="900" height="1309" loading="lazy">
+          <span class="guide-stat">0.77 confidence</span>
+        </div>
+        <figcaption>
+          <span class="guide-brand">GOV.UK</span>
+          <span class="guide-case">No framework, no h1 · GDS Transport</span>
+        </figcaption>
+      </figure>
+
+      <figure class="guide-card" data-reveal style="--i: 2">
+        <div class="guide-frame">
+          <img src="/showcase-patagonia.webp" alt="A Patagonia brand guide extracted by BrandKit, set in Ridgeway Sans on a warm page" width="900" height="1309" loading="lazy">
+          <span class="guide-stat">0.79 confidence</span>
+        </div>
+        <figcaption>
+          <span class="guide-brand">Patagonia</span>
+          <span class="guide-case">Typefaces behind var() · Ridgeway Sans</span>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="lp-section lp-how" id="how-it-works" aria-labelledby="how-title">
+    <div class="lp-head" data-reveal>
+      <p class="lp-kicker"><span>03</span> How it works</p>
+      <h2 class="lp-title" id="how-title">One name in. <em>One complete guide out.</em></h2>
+      <p class="lp-lede">No crawling setup, no scraping library, no headless browser. A name or a URL is the whole brief.</p>
+    </div>
+
+    <ol class="step-grid">
+      <li class="step" data-reveal style="--i: 0">
+        <div class="step-top"><span class="step-num">01</span><span class="step-tag">Name it</span></div>
+        <h3>Point at a brand</h3>
+        <p>Enter a company name or paste its domain. A bare name is resolved through search; a URL is opened directly.</p>
+      </li>
+      <li class="step" data-reveal style="--i: 1">
+        <div class="step-top"><span class="step-num">02</span><span class="step-tag">Read it</span></div>
+        <h3>Let it read the live site</h3>
+        <p>TinyFish Fetch reads the document head, every stylesheet, the content pages and the logo assets. Each value is measured where it lives.</p>
+      </li>
+      <li class="step" data-reveal style="--i: 2">
+        <div class="step-top"><span class="step-num">03</span><span class="step-tag">Take it</span></div>
+        <h3>Leave with the guide</h3>
+        <p>Flip through a paged document in the brand's own identity, then export it into the tools you already use.</p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- Exports -->
+  <section class="lp-section lp-exports" id="exports" aria-labelledby="exports-title">
+    <div class="export-panel" data-reveal>
+      <div class="export-copy">
+        <p class="lp-kicker"><span>04</span> Take it with you</p>
+        <h2 class="lp-title" id="exports-title">The guide ends. <em>The work starts.</em></h2>
+        <p class="lp-lede">The same extracted object serialises into seven formats. No re-crawl, no retyping, no handoff document that goes stale.</p>
+        <div class="export-sample" aria-label="Example CSS custom property from a Linear extraction">
+          <span class="sample-dot" aria-hidden="true"></span>
+          <code>--brand-primary: #7070ff;</code>
+          <span class="sample-source">from linear.app</span>
+        </div>
+      </div>
+
+      <ul class="format-grid">
+        <li><span class="format-mark">F</span><span>Figma Variables</span></li>
+        <li><span class="format-mark">TW</span><span>Tailwind theme</span></li>
+        <li><span class="format-mark">CSS</span><span>Custom properties</span></li>
+        <li><span class="format-mark">SD</span><span>Style Dictionary</span></li>
+        <li><span class="format-mark">MD</span><span>Markdown guide</span></li>
+        <li><span class="format-mark">SVG</span><span>Palette board</span></li>
+        <li><span class="format-mark">{ }</span><span>Complete JSON</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="lp-final" id="start" aria-labelledby="start-title">
+    <div class="final-orb final-orb-a" aria-hidden="true"></div>
+    <div class="final-orb final-orb-b" aria-hidden="true"></div>
+    <div class="final-card" data-reveal>
+      <span class="final-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="9"/><path d="M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z"/></svg>
+      </span>
+      <p class="lp-kicker"><span>05</span> Start with a name</p>
+      <h2 class="lp-title" id="start-title">Start with a name.
+        <br><em>Leave with a brand guide.</em></h2>
+      <p class="lp-lede">Logo, colour, type, voice and messaging — one click, ready for the next deck, the next handoff, the next launch.</p>
+      <a class="lp-button" href="#hero-composer" data-focus-search>
+        Get Started
+        <svg aria-hidden="true"><use href="#i-arrow"/></svg>
+      </a>
+      <p class="final-note">Bring your own TinyFish key. No account. Nothing stored.</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="lp-footer">
+    <div class="lp-footer-inner">
+      <div class="lp-footer-top">
+        <a class="brand" href="#top" aria-label="BrandKit home">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M10 9H13.6V15.9L19.9 9H24L16.4 17.2 24.5 26H20L13.6 18.6V26H10Z"/></svg>
+          <span class="brand-name">BrandKit</span>
+        </a>
+
+        <nav class="lp-footer-links" aria-label="Footer">
+          <a href="#features">Features</a>
+          <a href="#guides">Real guides</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#exports">Exports</a>
+        </nav>
+
+        <div class="lp-social">
+          <a href="https://github.com/GxAditya/Brandkit" target="_blank" rel="noopener noreferrer" aria-label="BrandKit on GitHub" title="GitHub">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-github"/></svg>
+          </a>
+          <a href="https://x.com/kaditya264" target="_blank" rel="noopener noreferrer" aria-label="kaditya264 on X" title="X">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="lp-footer-base">
+        <p>Reads the live web through TinyFish Search and Fetch. Nothing is stored.</p>
+        <p>MIT licensed · Zero runtime dependencies</p>
+      </div>
+    </div>
+  </footer>
+</div>
 
 <main class="layout" id="work">
 
@@ -308,7 +535,7 @@
                aria-label="Company name or website" spellcheck="false" required>
       </div>
       <button type="submit" class="btn-primary" id="run-btn-stage">
-        <span class="btn-label">Extract guide</span>
+        <span class="btn-label">Generate guide</span>
         <span class="btn-spinner" aria-hidden="true"></span>
       </button>
       <p class="field-help composer-help" id="input-help">
@@ -342,11 +569,9 @@
     <!-- Alerts float. They are not part of the output, and nothing else is. -->
     <div id="alert-slot" class="toasts" aria-live="polite"></div>
 
-</main>
+  </section>
 
-<footer class="foot">
-  <p class="foot-line">Reads the live web through TinyFish Search and Fetch. Nothing is stored.</p>
-</footer>
+</main>
 
 <svg class="sprite" aria-hidden="true" focusable="false">
   <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.2 10.2 13.5 13.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
@@ -355,6 +580,8 @@
   <symbol id="i-prev" viewBox="0 0 16 16"><path d="M10 3.5L5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-next" viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-caret" viewBox="0 0 16 16"><path d="M4 6.5 8 10.5l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 16 16"><path d="M2.75 8h9.5M8.75 4.5 12.25 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 16 16"><path d="M8 2.75v9.5M4.5 8.75 8 12.25l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <!--
     A key rather than a gear: the thing being set is a credential, and a gear
     would promise preferences this dialog does not have.
@@ -368,6 +595,10 @@
   <symbol id="i-x" viewBox="0 0 24 24"><path fill="currentColor" d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></symbol>
   <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5v7.5M5 7.5L8 10.5l3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.75 12.25h10.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-alert" viewBox="0 0 16 16"><path d="M8 2.25L14.25 13.5H1.75z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.4v3.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.3" r=".85" fill="currentColor"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 1.8c.35 2.9 1.3 4.85 4.2 5.2-2.9.35-4.85 1.3-5.2 4.2-.35-2.9-1.3-4.85-4.2-5.2 2.9-.35 4.85-1.3 5.2-4.2Z" fill="currentColor"/><path d="M12.4 10.6c.14 1.16.52 1.94 1.68 2.08-1.16.14-1.94.52-2.08 1.68-.14-1.16-.52-1.94-1.68-2.08 1.16-.14 1.94-.52 2.08-1.68Z" fill="currentColor" opacity=".55"/></symbol>
+  <symbol id="i-scan" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.25" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14.6 14.6 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 6.9c.24 2.04.94 3.42 2.98 3.66-2.04.24-2.74 1.62-2.98 3.66-.24-2.04-.94-3.42-2.98-3.66 2.04-.24 2.74-1.62 2.98-3.66Z" fill="currentColor"/></symbol>
+  <symbol id="i-type" viewBox="0 0 24 24"><path d="M4 6.5V4.75h16V6.5M12 4.75V19.25M8.4 19.25h7.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3.5 8.5 4.4-8.5 4.4-8.5-4.4 8.5-4.4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m3.5 12.4 8.5 4.4 8.5-4.4M3.5 16.4l8.5 4.4 8.5-4.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 
 <script type="module" src="/app.js"></script>

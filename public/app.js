@@ -37,7 +37,7 @@ const state = {
 };
 
 const RUN_LABELS = {
-  guide: 'Extract guide',
+  guide: 'Generate guide',
   compare: 'Run comparison',
 };
 
@@ -125,8 +125,49 @@ function boot() {
   initPageCount();
   initDepthMenu();
   initSettings();
+  initLanding();
   syncLengthAvailability();
   setMode(state.mode, { quiet: true });
+}
+
+/* ── Landing page ───────────────────────────────────────────────────────── */
+
+/**
+ * The marketing page is static, so this only adds what CSS cannot: the
+ * scroll-triggered entrance and the two "Get Started" links that put the
+ * cursor where the work starts. Everything degrades to the plain page if
+ * either API is unavailable.
+ */
+function initLanding() {
+  for (const trigger of $$('[data-focus-search]')) {
+    trigger.addEventListener('click', (event) => {
+      if (state.view !== 'idle') return;
+      event.preventDefault();
+      $('#input')?.focus({ preventScroll: true });
+      $('.hero')?.scrollIntoView({
+        behavior: reduceMotion.matches ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    });
+  }
+
+  const items = $$('[data-reveal]');
+  if (!items.length) return;
+
+  if (!('IntersectionObserver' in window) || reduceMotion.matches) {
+    for (const item of items) item.classList.add('is-in');
+    return;
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      entry.target.classList.add('is-in');
+      observer.unobserve(entry.target);
+    }
+  }, { threshold: 0.14, rootMargin: '0px 0px -7% 0px' });
+
+  for (const item of items) observer.observe(item);
 }
 
 /* ── Settings ───────────────────────────────────────────────────────────── */
@@ -666,6 +707,11 @@ function resetToIdle() {
   $('#run-status').hidden = true;
 
   setView('idle');
+
+  // The landing page starts at the top. A finished run leaves the browser
+  // scrolled into the document, which would otherwise reopen the page halfway
+  // down with the hero above the viewport.
+  window.scrollTo({ top: 0, behavior: reduceMotion.matches ? 'auto' : 'smooth' });
 }
 
 /* ── Guide length ────────────────────────────────────────────────────────── */
