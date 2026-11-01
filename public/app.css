@@ -896,6 +896,13 @@ input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .composer .btn-primary { min-width: 158px; }
 
+body[data-view="running"] .composer .btn-primary {
+  min-height: 40px;
+  height: 40px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
 /* The helper sits under the row rather than beside it, so the composer stays
    one line tall at every width down to a phone. */
 .composer-help { grid-column: 1 / -1; margin: 0; }
@@ -2281,6 +2288,15 @@ body[data-view="running"] .appbar-inner {
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.95) inset,
     0 18px 40px -30px rgba(74, 28, 47, 0.32);
+}
+
+/* The settings CTA uses the same shared landing-page recipe in both views.
+   Supply its idle-view tokens here so the results navbar keeps the same soft
+   pink fill and dark lettering instead of falling back to the workspace accent. */
+body[data-view="running"] #settings-btn {
+  --lp-pink-soft: #f8b4c6;
+  --lp-ink: #2a1b22;
+  --lp-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 body[data-view="running"] .brand-mark {
